@@ -81,7 +81,7 @@ class SInnovation:
     def __eq__(self, other: object) -> bool:
         return self.innovationType == other if isinstance(other, SInnovation) else NotImplemented
 
-class SNeuronGene:
+class NeuronGene:
     def __init__(self, neuronType: NeuronType, ID: int, y: float, innovationID: int) -> None:
         self.neuronType = neuronType
         self.ID = ID
@@ -95,9 +95,9 @@ class SNeuronGene:
     def __eq__(self, other: Any) -> bool:
         return other is not None and self.innovationID == other.innovationID
 
-class SLinkGene:
+class LinkGene:
 
-    def __init__(self, fromNeuron: SNeuronGene, toNeuron: SNeuronGene, enabled: bool, innovationID: int, weight: float, recurrent: bool=False):
+    def __init__(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, enabled: bool, innovationID: int, weight: float, recurrent: bool=False):
         self.fromNeuron = fromNeuron
         self.toNeuron = toNeuron
 
@@ -109,11 +109,11 @@ class SLinkGene:
 
         self.innovationID = innovationID
 
-    def __lt__(self, other: SLinkGene) -> bool:
+    def __lt__(self, other: LinkGene) -> bool:
         return self.innovationID < other.innovationID
 
     def __eq__(self, other: object) -> bool:
-        return self.innovationID == other.innovationID if isinstance(other, SLinkGene) else NotImplemented
+        return self.innovationID == other.innovationID if isinstance(other, LinkGene) else NotImplemented
 
 class Innovations:
     def __init__(self) -> None:
@@ -131,10 +131,10 @@ class Innovations:
 
         return ID;
 
-    def createNewLink(self, fromNeuron: SNeuronGene, toNeuron: SNeuronGene, enabled: bool, weight: float, recurrent: bool=False) -> SLinkGene:
+    def createNewLink(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, enabled: bool, weight: float, recurrent: bool=False) -> LinkGene:
         ID = self.createNewLinkInnovation(fromNeuron.ID, toNeuron.ID)
 
-        return SLinkGene(fromNeuron, toNeuron, enabled, ID, weight, recurrent)
+        return LinkGene(fromNeuron, toNeuron, enabled, ID, weight, recurrent)
 
     def createNewNeuronInnovation(self, fromID: Optional[int], toID: Optional[int], neuronID: int) -> int:
         ID: int = innovations.checkInnovation(
@@ -153,7 +153,7 @@ class Innovations:
 
         return ID;
 
-    def createNewNeuron(self, y: float, neuronType: NeuronType, fromNeuron: Optional[SNeuronGene] = None, toNeuron: Optional[SNeuronGene] = None, neuronID: Optional[int] = None) -> SNeuronGene:
+    def createNewNeuron(self, y: float, neuronType: NeuronType, fromNeuron: Optional[NeuronGene] = None, toNeuron: Optional[NeuronGene] = None, neuronID: Optional[int] = None) -> NeuronGene:
         if (neuronID is None):
             neuronID = self.currentNeuronID
             self.currentNeuronID += 1
@@ -163,7 +163,7 @@ class Innovations:
 
         innovationID = self.createNewNeuronInnovation(fromID, toID, neuronID)
 
-        return SNeuronGene(neuronType, neuronID, y, innovationID)
+        return NeuronGene(neuronType, neuronID, y, innovationID)
     
     def checkInnovation(self, start: Optional[int], end: Optional[int], innovationType: InnovationType, neuronID: Optional[int] = None) -> int:
         matchingInnovations = [innovation for innovation in self.listOfInnovations 
@@ -196,15 +196,18 @@ class Innovations:
 global innovations
 innovations = Innovations()
 
-class CGenome:
+class Genome:
 
-    def __init__(self, ID: int, neurons: List[SNeuronGene], links: List[SLinkGene], inputs: int, outputs: int, parents: List[CGenome]=[]) -> None:
+    def __init__(self, ID: int, neurons: List[NeuronGene], links: List[LinkGene], inputs: int, 
+        outputs: int, parents: List[Genome]=[]) -> None:
         self.ID = ID
         self.parents = parents
 
+        # Are these necessary?
         self.inputs = inputs
         self.outputs = outputs
-        
+        ##########################
+
         self.links = links
         self.neurons = neurons
         
@@ -228,24 +231,24 @@ class CGenome:
         
         self.species: Optional[Species] = None            
 
-    def __lt__(self, other: CGenome) -> bool:
+    def __lt__(self, other: Genome) -> bool:
         return self.fitness < other.fitness
 
     def __deepcopy__(self, memodict={}):
-        copy_object = CGenome(self.ID, deepcopy(self.neurons), deepcopy(self.links), self.inputs, self.outputs, self.parents)
+        copy_object = Genome(self.ID, deepcopy(self.neurons), deepcopy(self.links), self.inputs, self.outputs, self.parents)
         return copy_object
 
 
-    def getLinksIn(self, neuron: SNeuronGene) -> List[SLinkGene]:
+    def getLinksIn(self, neuron: NeuronGene) -> List[LinkGene]:
         return [l for l in self.links if l.toNeuron == neuron]
 
-    def getLinksOut(self, neuron: SNeuronGene) -> List[SLinkGene]:
+    def getLinksOut(self, neuron: NeuronGene) -> List[LinkGene]:
         return [l for l in self.links if l.fromNeuron == neuron]
 
-    def isNeuronValid(self, neuron: SNeuronGene) -> bool:
+    def isNeuronValid(self, neuron: NeuronGene) -> bool:
         return len(self.getLinksIn(neuron)) >= 1 or len(self.getLinksOut(neuron)) >= 1
 
-    def calculateCompatibilityDistance(self, other: CGenome) -> float:
+    def calculateCompatibilityDistance(self, other: Genome) -> float:
         disjointRate = 1.0
         matchedRate = 0.4
 
@@ -316,8 +319,8 @@ class CGenome:
 
     def addRandomLink(self, chanceOfLooped: float) -> None:
 
-        fromNeuron: Optional[SNeuronGene] = None
-        toNeuron: Optional[SNeuronGene] = None
+        fromNeuron: Optional[NeuronGene] = None
+        toNeuron: Optional[NeuronGene] = None
         recurrent: bool = False
 
         # Add recurrent link
@@ -367,7 +370,7 @@ class CGenome:
 
         self.addLink(fromNeuron, toNeuron, recurrent)
     
-    def addLink(self, fromNeuron: SNeuronGene, toNeuron: SNeuronGene, weight: float = 1.0, recurrent: bool = False) -> None:
+    def addLink(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, weight: float = 1.0, recurrent: bool = False) -> None:
         link = innovations.createNewLink(fromNeuron, toNeuron, True, 1.0, recurrent)
         self.links.append(link)
 
@@ -380,7 +383,7 @@ class CGenome:
 
         self.removeLink(randomLink)
 
-    def removeLink(self, link: SLinkGene) -> None:
+    def removeLink(self, link: LinkGene) -> None:
 
         fromNeuron = link.fromNeuron
 
@@ -439,7 +442,7 @@ class CGenome:
         randomNeuron = random.choice(possibleNeurons)
         self.removeNeuron(randomNeuron)
 
-    def removeNeuron(self, neuron: SNeuronGene) -> None:
+    def removeNeuron(self, neuron: NeuronGene) -> None:
         linksIn = self.getLinksIn(neuron)
         linksOut = self.getLinksOut(neuron)
         

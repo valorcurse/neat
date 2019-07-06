@@ -1,13 +1,14 @@
 from typing import List, Optional
 
 from neat.population import Population
-from neat.genes import CGenome
+from neat.genes import Genome
 # from neat.neat import Species
 
 import math
 import random
-import deepcopy
+from copy import deepcopy
 
+from neat.genes import Phase
 
 class DefaultPopulation(Population):
 
@@ -42,7 +43,7 @@ class DefaultPopulation(Population):
             #     continue
 
             for i in range(s.numToSpawn):
-                baby: Optional[CGenome] = None
+                baby: Optional[Genome] = None
 
                 # if (self.phase == Phase.PRUNING or random.random() > self.mutationRates.crossoverRate):
                 if (random.random() > self.mutationRates.crossoverRate):
