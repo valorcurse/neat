@@ -247,7 +247,6 @@ class NEAT:
         # Find best leader for species from the new population
         unspeciated = list(range(0, len(self.genomes)))
         for s in self.species:
-            # compareMember = random.choice(s.members)
             compareMember = s.leader
 
             s.members = []

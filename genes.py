@@ -31,6 +31,16 @@ class SpeciationType(Enum):
     COMPATIBILITY_DISTANCE = 0
     NOVELTY = 1
 
+activations = [
+    lambda x: 1.0 / (1.0 + math.exp(-x)),   # Sigmoid
+    lambda x: np.tanh(x),                   # Tanh
+    lambda x: np.maximum(x, 0),             # ReLu
+    lambda x: x if x > 0.0 else x * 0.01,   # Leaky ReLu
+    lambda x: np.sin(x),                    # Sin
+    lambda x: np.cos(x)                     # Cos
+]
+
+
 class MutationRates:
     def __init__(self) -> None:
         self.crossoverRate = 0.7
@@ -78,8 +88,9 @@ class SNeuronGene:
         self.splitY = y
         self.innovationID = innovationID
         
-        self.bias = 0.0
-        self.recurrent = False
+        self.bias = 1.0
+        self.activation = activations[0]
+        # self.recurrent = False
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and self.innovationID == other.innovationID
@@ -463,7 +474,6 @@ class CGenome:
             self.neurons.remove(neuron)
 
 
-    # def mutateWeights(self, mutationRate: float, replacementProbability: float, maxWeightPerturbation: float) -> None:
     def mutateWeights(self, mutationRates: MutationRates) -> None:
             for link in self.links:
                 if (random.random() > (1 - mutationRates.chanceToMutateWeight)):
@@ -490,6 +500,15 @@ class CGenome:
             else:
             # elif (random.random() < mutationRates.replacementProbability):
                 n.bias = random.gauss(0.0, mutationRates.maxWeightPerturbation)
+
+    def mutateActivation(self, mutationRates: MutationRates) -> None:
+        neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
+        for n in neurons:
+            if (random.random() > (1 - mutationRates.chanceToAddNeuron)):
+                continue
+
+            n.activation = random.choice(activations)
+
 
     def mutate(self, phase: Phase, mutationRates: MutationRates) -> None:
         # div = max(1,(self.chanceToAddNeuron*2 + self.chanceToAddLink*2))
@@ -523,9 +542,9 @@ class CGenome:
         # elif phase == Phase.PRUNING:
 
         self.mutateWeights(mutationRates)
-            # mutationRates.mutationRate, mutationRates.probabilityOfWeightReplaced, mutationRates.maxWeightPerturbation)
         self.mutateBias(mutationRates)
-            # mutationRates.chanceToMutateBias, mutationRates.probabilityOfWeightReplaced, mutationRates.maxWeightPerturbation)
+
+        self.mutateActivation(mutationRates)
 
         self.links.sort()
 
@@ -536,6 +555,7 @@ class CGenome:
             newNeuron = SNeuron(neuron.neuronType,
                         neuron.ID,
                         neuron.bias,
+                        neuron.activation,
                         neuron.splitY)
 
             phenotypeNeurons.append(newNeuron)
