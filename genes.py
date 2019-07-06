@@ -20,7 +20,7 @@ from prettytable import PrettyTable
 
 from neat.phenotypes import CNeuralNet, SLink, SNeuron, NeuronType
 
-class CSpecies:
+class Species:
     pass
 
 class Phase(Enum):
@@ -226,7 +226,7 @@ class CGenome:
         # For printing
         self.distance: float = 0.0
         
-        self.species: Optional[CSpecies] = None            
+        self.species: Optional[Species] = None            
 
     def __lt__(self, other: CGenome) -> bool:
         return self.fitness < other.fitness

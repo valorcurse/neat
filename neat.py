@@ -28,7 +28,7 @@ from neat.phenotypes import CNeuralNet
 
 global innovations
 
-class CSpecies:
+class Species:
     numGensAllowNoImprovement = 20
 
     def __init__(self, speciesID: int, leader: CGenome):
@@ -109,7 +109,7 @@ class NEAT:
 
         self.genomes: List[CGenome] = []
         self.phenotypes: List[CNeuralNet] = []
-        self.species: List[CSpecies] = []
+        self.species: List[Species] = []
         self.speciesNumber: int = 0
 
         self.populationSize: int = numberOfGenomes
@@ -197,7 +197,7 @@ class NEAT:
         if len(self.species) > 1:
             totalDistance: float = 0.0
             for s in self.species:
-                randomSpecies: CSpecies = random.choice([r for r in self.species if r is not s])
+                randomSpecies: Species = random.choice([r for r in self.species if r is not s])
 
                 totalDistance += s.leader.calculateCompatibilityDistance(randomSpecies.leader)
             
@@ -291,13 +291,13 @@ class NEAT:
             else: # Else create a new species
                 chance: float = random.random()
 
-                parentSpecies: Optional[CSpecies] = random.choice(genome.parents).species
+                parentSpecies: Optional[Species] = random.choice(genome.parents).species
 
                 # if (chance >= 0.1) and parentSpecies is not None:
                 #     parentSpecies.addMember(genome)
                 # else:
                 self.speciesNumber += 1
-                self.species.append(CSpecies(self.speciesNumber, genome))
+                self.species.append(Species(self.speciesNumber, genome))
 
 
     def reproduce(self) -> None:
