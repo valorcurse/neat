@@ -81,6 +81,11 @@ class Species:
         if (self.generationsWithoutImprovement >= self.numGensAllowNoImprovement):
             self.stagnant = True
 
+class PopulationConfiguration:
+	
+	def __init__(self):
+		pass
+
 class Population:
 
     def __init__(self, populationSize: int, mutationRates: MutationRates):
@@ -97,18 +102,22 @@ class Population:
         self.genomes: List[Genome] = []
 
         self.averageInterspeciesDistance: float = 0.0
+        self.numOfInputs = 0
+        self.numOfOutputs = 0
 
     def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], 
     	numOfInputs: int, numOfOutputs: int, parents=[]):
     	
+    	self.numOfInputs = numOfInputs
+    	self.numOfOutputs = numOfOutputs
+
     	for i in range(self.populationSize):
-            genome = self.newGenome(neurons, links, numOfInputs, numOfOutputs)
+            genome = self.newGenome(neurons, links)
             genome.parents = [genome]
 
-    def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], 
-    	numOfInputs: int, numOfOutputs: int, parents=[]):
+    def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
     	
-    	genome = Genome(self.currentGenomeID, neurons, links, numOfInputs, numOfOutputs, parents)
+    	genome = Genome(self.currentGenomeID, neurons, links, self.numOfInputs, self.numOfOutputs, parents)
     	self.genomes.append(genome)
     	self.currentGenomeID += 1
 
@@ -179,7 +188,7 @@ class Population:
 
                 totalDistance += s.leader.calculateCompatibilityDistance(randomSpecies.leader)
             
-            self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species))*0.5)
+            self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
 
             print("averageInterspeciesDistance: " + str(self.averageInterspeciesDistance))
 
@@ -232,7 +241,7 @@ class Population:
 
         babyNeurons.sort(key=lambda x: x.splitY, reverse=False)
 
-        return self.newGenome(babyNeurons, babyLinks, best.inputs, best.outputs, [mum, dad])
+        return self.newGenome(babyNeurons, babyLinks, [mum, dad])
 
 
     def reproduce(self) -> List:

@@ -2,7 +2,6 @@ from typing import List, Optional
 
 from neat.population import Population
 from neat.genes import Genome
-# from neat.neat import Species
 
 import math
 import random

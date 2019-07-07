@@ -17,13 +17,15 @@ from prettytable import PrettyTable
 # import genes
 from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, innovations, MutationRates, Phase, SpeciationType
 from neat.phenotypes import CNeuralNet
-from neat.defaultPopulation import DefaultPopulation
+# from neat.population import PopulationConfiguration
+# from neat.defaultPopulation import DefaultPopulation
+from neat.mapelites import MapElites, MapElitesConfiguration
 
 global innovations
 
 class NEAT:
 
-    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int,
+    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int, populationConfiguration: MapElitesConfiguration,
         mutationRates: MutationRates=MutationRates(), fullyConnected: bool=False) -> None:
 
         self.mutationRates: MutationRates = mutationRates
@@ -62,7 +64,8 @@ class NEAT:
 
         inputs.extend(outputs)
         
-        self.population = DefaultPopulation(numberOfGenomes, mutationRates)
+        # self.population = DefaultPopulation(numberOfGenomes, mutationRates)
+        self.population = MapElites(numberOfGenomes, inputs, outputs, mutationRates, populationConfiguration)
         self.population.initiate(inputs, links, numOfInputs, numOfOutputs)
 
 
@@ -78,8 +81,8 @@ class NEAT:
         # print("mpc", mpc)
         # print("mpc threshold", self.mpcThreshold)
 
-        self.population.speciate()
-        self.epoch([0]*len(self.population.genomes))
+        # self.population.speciate()
+        # self.epoch([0]*len(self.population.genomes))
 
 
     # def calculateMPC(self):
@@ -151,4 +154,8 @@ class NEAT:
             portionOfFitness: float = 1.0 if allFitnesses == 0.0 and sumOfFitnesses == 0.0 else sumOfFitnesses/allFitnesses
             s.numToSpawn = int(self.population.populationSize * portionOfFitness)
 
-    
+    def getCandidate(self) -> Genome:
+        return self.population.reproduce()
+
+    def updateCandidate(self, candidate, fitness, features):
+        self.population.updateArchive(candidate, fitness, features)
