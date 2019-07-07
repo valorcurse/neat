@@ -12,7 +12,7 @@ from neat.genes import Phase
 
 class DefaultPopulation(Population):
 
-    def reproduce(self) -> List:
+    def reproduce(self):
 
         newPop = []
         for s in self.species:
@@ -68,4 +68,4 @@ class DefaultPopulation(Population):
 
                 newPop.append(baby)
 
-        return newPop
+        self.genomes = newPop

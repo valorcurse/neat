@@ -71,7 +71,7 @@ class CNeuralNet:
     def calcOutput(self, neuron: SNeuron) -> float:
         linksIn = neuron.linksIn
         if (len(linksIn) > 0):
-            return self.sigmoid(neuron.bias + np.sum([self.calcOutput(linkIn.fromNeuron) * linkIn.weight for linkIn in linksIn]))
+            return neuron.activate(np.sum([self.calcOutput(linkIn.fromNeuron) * linkIn.weight for linkIn in linksIn]))
         else:
             return neuron.output
 
