@@ -45,6 +45,7 @@ class NEAT:
             newInput = innovations.createNewNeuron(0.0, NeuronType.INPUT, fromNeuron = None, toNeuron = None, neuronID = -n-1)
             inputs.append(newInput)
 
+        inputs.append(innovations.createNewNeuron(1.0, NeuronType.BIAS, fromNeuron = None, toNeuron = None, neuronID = -len(inputs)-1))
         print("")
 
         outputs = []
@@ -157,5 +158,5 @@ class NEAT:
     def getCandidate(self) -> Genome:
         return self.population.reproduce()
 
-    def updateCandidate(self, candidate, fitness, features):
-        self.population.updateArchive(candidate, fitness, features)
+    def updateCandidate(self, candidate, fitness, features) -> bool:
+        return self.population.updateArchive(candidate, fitness, features)

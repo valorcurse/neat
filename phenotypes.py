@@ -17,13 +17,13 @@ class NeuronType(Enum):
     OUTPUT = 3
     LINK = 4
 
+
 class SNeuron:
-    def __init__(self, neuronType: NeuronType, neuronID: int, bias: float, activation: Callable[[float], float],  y: float) -> None:
+    def __init__(self, neuronType: NeuronType, neuronID: int, activation: Callable[[float], float],  y: float) -> None:
         self.linksIn: List[SLink] = []
 
         self.activation = activation
-        self.bias = bias
-        self.output = 0.0
+        self.output = 1.0 if neuronType == NeuronType.BIAS else 0.0
 
         self.neuronType = neuronType
 
@@ -34,7 +34,7 @@ class SNeuron:
         self.splitY = y
 
     def activate(self, x: float) -> float:
-        return self.activation(self.bias + x)
+        return self.activation(x)
 
 class SLink:
 
@@ -89,6 +89,8 @@ class CNeuralNet:
         inputNeurons = [neuron for neuron in self.neurons if neuron.neuronType == NeuronType.INPUT]
         for value, neuron in zip(inputs, inputNeurons):
             neuron.output = value
+
+        inputNeurons += [neuron for neuron in self.neurons if neuron.neuronType == NeuronType.BIAS]
 
         for currentNeuron in self.neurons[len(inputNeurons):]:
             linksIn = currentNeuron.linksIn

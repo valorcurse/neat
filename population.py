@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Tuple
 
 import random
-from copy import deepcopy
+import pickle
 
 from neat.neat import MutationRates
 from neat.genes import Genome, NeuronType, LinkGene, NeuronGene
@@ -195,6 +195,8 @@ class Population:
     def crossover(self, mum: Genome, dad: Genome) -> Genome:
         
         best = None
+
+        # If both parents perform equally, choose the simpler one
         if (mum.fitness == dad.fitness):
             if (len(mum.links) == len(dad.links)):
                 best = random.choice([mum, dad])
@@ -204,7 +206,7 @@ class Population:
             best = mum if mum.fitness > dad.fitness else dad
 
         # Copy input and output neurons
-        babyNeurons = [deepcopy(n) for n in best.neurons
+        babyNeurons = [pickle.loads(pickle.dumps(n, -1)) for n in best.neurons
                        if (n.neuronType in [NeuronType.INPUT, NeuronType.OUTPUT])]
 
         combinedIndexes = list(set(
@@ -222,11 +224,11 @@ class Population:
             
             if (mumLink is None):
                 if (dadLink is not None and best == dad):
-                    babyLinks.append(deepcopy(dadLink))
+                    babyLinks.append(pickle.loads(pickle.dumps(dadLink, -1)))
 
             elif (dadLink is None):
                 if (mumLink is not None and best == mum):
-                    babyLinks.append(deepcopy(mumLink))
+                    babyLinks.append(pickle.loads(pickle.dumps(mumLink, -1)))
 
             else:
                 babyLinks.append(random.choice([mumLink, dadLink]))
@@ -234,10 +236,10 @@ class Population:
         for link in babyLinks:
 
             if (link.fromNeuron.innovationID not in [n.innovationID for n in babyNeurons]):
-                babyNeurons.append(deepcopy(link.fromNeuron))
+                babyNeurons.append(pickle.loads(pickle.dumps(link.fromNeuron, -1)))
 
             if (link.toNeuron.innovationID not in [n.innovationID for n in babyNeurons]):
-                babyNeurons.append(deepcopy(link.toNeuron))
+                babyNeurons.append(pickle.loads(pickle.dumps(link.toNeuron, -1)))
 
         babyNeurons.sort(key=lambda x: x.splitY, reverse=False)
 

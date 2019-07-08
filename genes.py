@@ -10,7 +10,7 @@ from math import cos, sin, atan, ceil, floor
 from sklearn.preprocessing import normalize
 from enum import Enum
 import itertools
-from copy import deepcopy
+import pickle
 
 import numpy as np
 from matplotlib import pyplot
@@ -31,14 +31,14 @@ class SpeciationType(Enum):
     COMPATIBILITY_DISTANCE = 0
     NOVELTY = 1
 
-activations = [
-    lambda x: 1.0 / (1.0 + math.exp(-x)),   # Sigmoid
-    lambda x: np.tanh(x),                   # Tanh
-    lambda x: np.maximum(x, 0),             # ReLu
-    lambda x: x if x > 0.0 else x * 0.01,   # Leaky ReLu
-    lambda x: np.sin(x),                    # Sin
-    lambda x: np.cos(x)                     # Cos
-]
+# activations = [
+#     lambda x: 1.0 / (1.0 + math.exp(-x)),   # Sigmoid
+#     lambda x: np.tanh(x),                   # Tanh
+#     lambda x: np.maximum(x, 0),             # ReLu
+#     lambda x: x if x > 0.0 else x * 0.01,   # Leaky ReLu
+#     lambda x: np.sin(x),                    # Sin
+#     lambda x: np.cos(x)                     # Cos
+# ]
 
 
 class MutationRates:
@@ -88,9 +88,13 @@ class NeuronGene:
         self.splitY = y
         self.innovationID = innovationID
         
-        self.bias = 1.0
-        self.activation = activations[0]
+        # self.bias = 1.0
+        # self.activation = activations[0]
+        # self.activation = activations[0]
         # self.recurrent = False
+
+    def activation(self, x):
+        return np.tanh(x)        
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and self.innovationID == other.innovationID
@@ -198,6 +202,7 @@ innovations = Innovations()
 
 class Genome:
 
+    # @profile
     def __init__(self, ID: int, neurons: List[NeuronGene], links: List[LinkGene], inputs: int, 
         outputs: int, parents: List[Genome]=[]) -> None:
         self.ID = ID
@@ -208,8 +213,8 @@ class Genome:
         self.outputs = outputs
         ##########################
 
-        self.links = links
-        self.neurons = neurons
+        self.links = pickle.loads(pickle.dumps(links, -1))
+        self.neurons = pickle.loads(pickle.dumps(neurons, -1))
         
         if (len(self.neurons) == 0):
             for n in range(inputs):
@@ -530,11 +535,11 @@ class Genome:
 
 
         # if phase == Phase.COMPLEXIFYING:
-        if (random.random() < mutationRates.chanceToDeleteNeuron):
-            self.removeRandomNeuron()
+        # if (random.random() < mutationRates.chanceToDeleteNeuron):
+        #     self.removeRandomNeuron()
 
-        if (random.random() < mutationRates.chanceToDeleteLink):
-            self.removeRandomLink()
+        # if (random.random() < mutationRates.chanceToDeleteLink):
+        #     self.removeRandomLink()
 
         if (random.random() < mutationRates.chanceToAddNeuron):
             self.addNeuron()
@@ -545,9 +550,9 @@ class Genome:
         # elif phase == Phase.PRUNING:
 
         self.mutateWeights(mutationRates)
-        self.mutateBias(mutationRates)
+        # self.mutateBias(mutationRates)
 
-        self.mutateActivation(mutationRates)
+        # self.mutateActivation(mutationRates)
 
         self.links.sort()
 
@@ -557,7 +562,6 @@ class Genome:
         for neuron in self.neurons:
             newNeuron = SNeuron(neuron.neuronType,
                         neuron.ID,
-                        neuron.bias,
                         neuron.activation,
                         neuron.splitY)
 

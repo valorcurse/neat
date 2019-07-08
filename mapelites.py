@@ -6,7 +6,7 @@ from neat.genes import Genome, NeuronGene, LinkGene, Phase
 
 import random
 import numpy as np
-from copy import deepcopy
+import pickle
 
 class Feature:
 
@@ -16,7 +16,7 @@ class Feature:
 		self.max = maximum
 
 class MapElitesConfiguration(PopulationConfiguration):
-	def __init__(self, mapResolution: int, features: List[Text]):
+	def __init__(self, mapResolution: int, features: List[Feature]):
 		self.mapResolution = mapResolution
 		self.features = features
 
@@ -35,6 +35,7 @@ class MapElites(Population):
 
 		self.archive = np.full([configuration.mapResolution]*len(configuration.features), None, dtype=Genome)
 		self.performances = np.zeros([configuration.mapResolution]*len(configuration.features))
+		self.archivedGenomes: List[Genome] = []
 
 	def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], 
 		numOfInputs: int, numOfOutputs: int, parents=[]):
@@ -44,6 +45,16 @@ class MapElites(Population):
 		genome.parents = [genome]
 
 
+	def randomInitialization(self) -> List[Genome]:
+		randomPop: List[Genome] = []
+		for _ in range(100):
+			genome: Genome = self.newGenome(self.inputs + self.outputs, [])
+			for _ in range(100):
+				genome.mutate(Phase.COMPLEXIFYING, self.mutationRates)
+			randomPop.append(genome)
+
+		return randomPop
+
 	def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
 		
 		genome = Genome(self.currentGenomeID, neurons, links, len(self.inputs), len(self.outputs), parents)
@@ -52,33 +63,27 @@ class MapElites(Population):
 
 		return genome
 
+	# @profile
 	def reproduce(self):
-		possibleCandidates = self.archive[self.archive != None]
 
-		if len(possibleCandidates) == 0:
-			neurons = self.inputs
-			neurons.extend(self.outputs)
+		if len(self.archivedGenomes) == 0:
+			newGenome = self.newGenome(self.inputs + self.outputs, [])
+			self.archivedGenomes.append(newGenome)
+			return newGenome
 
-			return self.newGenome(neurons, [])
-
-		member = np.random.choice(possibleCandidates)
-		# while (member is None):
-			# member = np.random.choice(self.archive)
+		member = random.choice(self.archivedGenomes)
 
 		baby: Optional[Genome] = None
 		if (random.random() > self.mutationRates.crossoverRate):
-			baby = deepcopy(member)
+			baby = self.newGenome(member.neurons, member.links, member.parents)
 			baby.mutate(Phase.COMPLEXIFYING, self.mutationRates)
-
 		else:
-			otherMember = np.random.choice(possibleCandidates)
-
+			otherMember = random.choice(self.archivedGenomes)
 			baby = self.crossover(member, otherMember)
-
 
 		return baby
 
-	def updateArchive(self, candidate, fitness, features):
+	def updateArchive(self, candidate, fitness, features) -> bool:
 
 		featuresIndexes = []
 		for idx, feature in enumerate(features):
@@ -89,8 +94,10 @@ class MapElites(Population):
 			elif feature > archiveFeature.max:
 				archiveFeature.max = feature
 
-			index: int = int((archiveFeature.max - feature)/(archiveFeature.max - archiveFeature.min))
-			index = int(index * self.configuration.mapResolution)
+			# print("(%f - %f)/(%f - %f))"%(archiveFeature.max, feature, archiveFeature.max, archiveFeature.min))
+
+			relativePosition: float = (archiveFeature.max - feature)/(archiveFeature.max - archiveFeature.min)
+			index = int(relativePosition * self.configuration.mapResolution)
 			index = max(0, index - 1)
 			featuresIndexes.append(index)
 
@@ -99,9 +106,17 @@ class MapElites(Population):
 		archivedPerformance = self.performances[tupleIndex]
 
 		if (fitness > archivedPerformance):
+			if archivedCandidate is not None:
+				self.archivedGenomes.remove(archivedCandidate)
+			
 			self.archive[tupleIndex] = candidate
+			self.archivedGenomes.append(candidate)
+
 			self.performances[tupleIndex] = fitness
 
+			return True
+
+		return False
 
 		# possibleCandidates = self.archive[self.archive != None]
 		# total = pow(self.configuration.mapResolution, len(self.configuration.features))

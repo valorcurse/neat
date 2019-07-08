@@ -5,7 +5,7 @@ from neat.genes import Genome
 
 import math
 import random
-from copy import deepcopy
+import pickle
 
 from neat.genes import Phase
 
@@ -46,7 +46,8 @@ class DefaultPopulation(Population):
 
                 # if (self.phase == Phase.PRUNING or random.random() > self.mutationRates.crossoverRate):
                 if (random.random() > self.mutationRates.crossoverRate):
-                    baby = deepcopy(random.choice(s.members))
+                    # baby = deepcopy(random.choice(s.members))
+                    baby = pickle.loads(pickle.dumps(member, -1))
                     baby.mutate(Phase.COMPLEXIFYING, self.mutationRates)
                 else:
                     # g1 = random.choice(members)
