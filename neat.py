@@ -14,6 +14,8 @@ from operator import attrgetter
 
 from prettytable import PrettyTable
 
+from xarray import DataArray
+
 # import genes
 from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, innovations, MutationRates, Phase, SpeciationType
 from neat.phenotypes import CNeuralNet
@@ -25,8 +27,8 @@ global innovations
 
 class NEAT:
 
-    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int, populationConfiguration: MapElitesConfiguration,
-        mutationRates: MutationRates=MutationRates(), fullyConnected: bool=False) -> None:
+    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int, substratePositions: List[int],
+        populationConfiguration: MapElitesConfiguration, mutationRates: MutationRates=MutationRates()) -> None:
 
         self.mutationRates: MutationRates = mutationRates
         self.phenotypes: List[CNeuralNet] = []
@@ -38,6 +40,9 @@ class NEAT:
         self.speciationType: SpeciationType = SpeciationType.NOVELTY
 
         self.milestone: float = 0.01
+
+        # CPPNs take 4 inputs, gotta move this somewhere else
+        nrOfInputs = 4
 
         inputs = []
         for n in range(numOfInputs):
@@ -56,15 +61,28 @@ class NEAT:
 
         print("")
 
-        links = []
-        if fullyConnected:
-            for input in inputs:
-                for output in outputs:
-                    new_link = innovations.createNewLink(input, output, True, 1.0)
-                    links.append(new_link)
+        links: List[LinkGene] = []
+        # if fullyConnected:
+        #     for input in inputs:
+        #         for output in outputs:
+        #             new_link = innovations.createNewLink(input, output, True, 1.0)
+        #             links.append(new_link)
 
-        inputs.extend(outputs)
+        # inputs.extend(outputs)
         
+        np.linspace(-1.0, 1.0, num=10)
+
+        nrOfLayers: int = 3
+        nodes = [
+            inputs,
+            [innovations.createNewNeuron(1.0, NeuronType.HIDDEN) for i in range(numOfInputs)],
+            outputs
+        ]
+        self.substrate: DataArray = DataArray(nodes, 
+            coords=[np.linspace(-1.0, 1.0, num=numOfInputs), np.linspace(-1.0, 1.0, num=nrOfLayers)], dims=['x', 'y'])
+
+        
+
         # self.population = DefaultPopulation(numberOfGenomes, mutationRates)
         self.population = MapElites(numberOfGenomes, inputs, outputs, mutationRates, populationConfiguration)
         self.population.initiate(inputs, links, numOfInputs, numOfOutputs)
@@ -156,7 +174,16 @@ class NEAT:
             s.numToSpawn = int(self.population.populationSize * portionOfFitness)
 
     def getCandidate(self) -> Genome:
-        return self.population.reproduce()
+        cppn = self.population.reproduce().createPhenotype()
+
+        flat = self.substrate.stack(z=("x", "y"))
+
+        for n in flat:
+            for other in flat.where(flat.x != n.x).where(flat.y != n.y):
+                cppn.update([n.x, n.y, other.x, other.y])
+
+        return None
+
 
     def updateCandidate(self, candidate, fitness, features) -> bool:
         return self.population.updateArchive(candidate, fitness, features)

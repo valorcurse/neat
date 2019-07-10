@@ -88,13 +88,30 @@ class NeuronGene:
         self.splitY = y
         self.innovationID = innovationID
         
-        # self.bias = 1.0
-        # self.activation = activations[0]
-        # self.activation = activations[0]
-        # self.recurrent = False
+        self.activation = self.tanh
 
-    def activation(self, x):
-        return np.tanh(x)        
+        self.activations = [self.sigmoid, self.tanh, self.sin, self.cos, self.gaussian]
+
+    def sigmoid(self, x: float) -> float:
+        return 1.0 / (1.0 + math.exp(-x))   # Sigmoid
+    
+    def tanh(self, x: float) -> float:
+        return np.tanh(x)                   # Tanh
+    
+    def relu(self, x: float) -> float:
+        return np.maximum(x, 0)             # ReLu
+    
+    def leakyRelu(self, x: float) -> float:
+        return x if x > 0.0 else x * 0.01   # Leaky ReLu
+    
+    def sin(self, x: float) -> float:
+        return np.sin(x)                    # Sin
+    
+    def cos(self, x: float) -> float:
+        return np.cos(x)                     # Cos
+
+    def gaussian(self, x: float) -> float:
+        return math.exp((-x)**2)
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and self.innovationID == other.innovationID
@@ -515,7 +532,7 @@ class Genome:
             if (random.random() > (1 - mutationRates.chanceToAddNeuron)):
                 continue
 
-            n.activation = random.choice(activations)
+            n.activation = random.choice(n.activations)
 
 
     def mutate(self, phase: Phase, mutationRates: MutationRates) -> None:
@@ -552,9 +569,39 @@ class Genome:
         self.mutateWeights(mutationRates)
         # self.mutateBias(mutationRates)
 
-        # self.mutateActivation(mutationRates)
+        self.mutateActivation(mutationRates)
 
         self.links.sort()
+
+    # def createPhenotype(self) -> CNeuralNet:
+    #     phenotypeNeurons = []
+
+    #     for neuron in self.neurons:
+    #         newNeuron = SNeuron(neuron.neuronType,
+    #                     neuron.ID,
+    #                     neuron.activation,
+    #                     neuron.splitY)
+
+    #         phenotypeNeurons.append(newNeuron)
+
+    #     for link in self.links:
+    #         if (link.enabled):
+    #             fromNeuron = next((neuron
+    #                                for neuron in phenotypeNeurons if (neuron.ID == link.fromNeuron.ID)), None)
+    #             toNeuron = next((neuron
+    #                              for neuron in phenotypeNeurons if (neuron.ID == link.toNeuron.ID)), None)
+
+    #             if (not fromNeuron) or (not toNeuron):
+    #                 continue
+
+    #             tmpLink = SLink(fromNeuron,
+    #                             toNeuron,
+    #                             link.weight,
+    #                             link.recurrent)
+
+    #             toNeuron.linksIn.append(tmpLink)
+
+    #     return CNeuralNet(phenotypeNeurons, self.ID)
 
     def createPhenotype(self) -> CNeuralNet:
         phenotypeNeurons = []
@@ -585,3 +632,4 @@ class Genome:
                 toNeuron.linksIn.append(tmpLink)
 
         return CNeuralNet(phenotypeNeurons, self.ID)
+
