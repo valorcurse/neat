@@ -535,11 +535,11 @@ class Genome:
 
 
         # if phase == Phase.COMPLEXIFYING:
-        # if (random.random() < mutationRates.chanceToDeleteNeuron):
-        #     self.removeRandomNeuron()
+        if (random.random() < mutationRates.chanceToDeleteNeuron):
+            self.removeRandomNeuron()
 
-        # if (random.random() < mutationRates.chanceToDeleteLink):
-        #     self.removeRandomLink()
+        if (random.random() < mutationRates.chanceToDeleteLink):
+            self.removeRandomLink()
 
         if (random.random() < mutationRates.chanceToAddNeuron):
             self.addNeuron()
