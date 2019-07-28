@@ -219,8 +219,8 @@ innovations = Innovations()
 
 class Genome:
 
-    # @profile
-    def __init__(self, ID: int, neurons: List[NeuronGene], links: List[LinkGene], inputs: int, 
+    # def __init__(self, ID: int, neurons: List[NeuronGene], links: List[LinkGene], inputs: int, 
+    def __init__(self, ID: int, numberOfNeurons: List[NeuronGene], links: List[LinkGene], inputs: int, 
         outputs: int, parents: List[Genome]=[]) -> None:
         self.ID = ID
         self.parents = parents

@@ -27,7 +27,7 @@ global innovations
 
 class NEAT:
 
-    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int, substratePositions: List[int],
+    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int,
         populationConfiguration: MapElitesConfiguration, mutationRates: MutationRates=MutationRates()) -> None:
 
         self.mutationRates: MutationRates = mutationRates
@@ -53,7 +53,7 @@ class NEAT:
         inputs.append(innovations.createNewNeuron(1.0, NeuronType.BIAS, fromNeuron = None, toNeuron = None, neuronID = -len(inputs)-1))
         print("")
 
-        outputs = []
+        # outputs = [innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)]
         for n in range(numOfOutputs):
             print("\rCreating output neurons (" + str(n + 1) + "/" + str(numOfOutputs) + ")", end='')
             newOutput = innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)
@@ -62,25 +62,24 @@ class NEAT:
         print("")
 
         links: List[LinkGene] = []
-        # if fullyConnected:
-        #     for input in inputs:
-        #         for output in outputs:
-        #             new_link = innovations.createNewLink(input, output, True, 1.0)
-        #             links.append(new_link)
 
-        # inputs.extend(outputs)
+        leftPadding = math.ceil((len(inputs) - numOfOutputs)/2)
+        rightPadding = (len(inputs) - numOfOutputs) - leftPadding
         
-        np.linspace(-1.0, 1.0, num=10)
+        hiddenNodes = [innovations.createNewNeuron(1.0, NeuronType.HIDDEN) for i in range(len(inputs))]
+        paddedOutputs = np.pad(outputs, (leftPadding, rightPadding), 'constant', constant_values=(None, None)).tolist()
 
-        nrOfLayers: int = 3
-        nodes = [
-            inputs,
-            [innovations.createNewNeuron(1.0, NeuronType.HIDDEN) for i in range(numOfInputs)],
-            outputs
-        ]
-        self.substrate: DataArray = DataArray(nodes, 
-            coords=[np.linspace(-1.0, 1.0, num=numOfInputs), np.linspace(-1.0, 1.0, num=nrOfLayers)], dims=['x', 'y'])
+        # nodes = np.row_stack((inputs, hiddenNodes, paddedOutputs)) 
+        nodes = np.array([inputs, hiddenNodes, paddedOutputs]) 
+            
+        nrOfLayers: int = nodes.shape[0]
 
+        self.substrate = np.meshgrid(
+            np.linspace(-1.0, 1.0, num=nrOfLayers), 
+            np.linspace(-1.0, 1.0, num=len(inputs)), sparse=False, indexing='xy')
+
+        # self.substrate: DataArray = DataArray(nodes, 
+        #     coords=[np.linspace(-1.0, 1.0, num=nrOfLayers), np.linspace(-1.0, 1.0, num=len(inputs))], dims=['x', 'y'])
         
 
         # self.population = DefaultPopulation(numberOfGenomes, mutationRates)
@@ -175,12 +174,23 @@ class NEAT:
 
     def getCandidate(self) -> Genome:
         cppn = self.population.reproduce().createPhenotype()
+        candidate = Genome()
 
-        flat = self.substrate.stack(z=("x", "y"))
+        layers = np.array(list(zip(*self.substrate)))
 
-        for n in flat:
-            for other in flat.where(flat.x != n.x).where(flat.y != n.y):
-                cppn.update([n.x, n.y, other.x, other.y])
+        for y in range(len(layers)-1):
+            coords = list(zip(*layers[y]))
+            nextLayers = np.array(layers[np.arange(y+1, layers.shape[0])])
+
+            for coord in coords:
+                for nextLayer in nextLayers:
+                    for nextCoord in list(zip(*nextLayer)):
+                        coordsInput = [coord[0], coord[1], nextCoord[0], nextCoord[1]]
+                        print(coordsInput)
+                        
+                        output = cppn.update(coordsInput)  
+                        print(output)
+
 
         return None
 

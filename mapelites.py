@@ -47,9 +47,9 @@ class MapElites(Population):
 
 	def randomInitialization(self) -> List[Genome]:
 		randomPop: List[Genome] = []
-		for _ in range(500):
+		for _ in range(100):
 			genome: Genome = self.newGenome(self.inputs + self.outputs, [])
-			for _ in range(250):
+			for _ in range(50):
 				genome.mutate(Phase.COMPLEXIFYING, self.mutationRates)
 			randomPop.append(genome)
 

@@ -75,6 +75,9 @@ class CNeuralNet:
         else:
             return neuron.output
 
+    def update(self, inputs: List[float]) -> List[float]:
+        return self.updateRecursively(inputs)
+
     def updateRecursively(self, inputs: List[float]) -> List[float]:
         inputNeurons = [neuron for neuron in self.neurons if neuron.neuronType == NeuronType.INPUT]
         for value, neuron in zip(inputs, inputNeurons):
@@ -84,7 +87,7 @@ class CNeuralNet:
 
         return [self.calcOutput(outputNeuron) for outputNeuron in outputNeurons]
 
-    def update(self, inputs: List[float]) -> List[float]:
+    def updateIteratively(self, inputs: List[float]) -> List[float]:
         # Set input neurons values
         inputNeurons = [neuron for neuron in self.neurons if neuron.neuronType == NeuronType.INPUT]
         for value, neuron in zip(inputs, inputNeurons):
