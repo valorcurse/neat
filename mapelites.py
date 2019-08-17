@@ -37,13 +37,6 @@ class MapElites(Population):
 		self.performances = np.zeros([configuration.mapResolution]*len(configuration.features))
 		self.archivedGenomes: List[Genome] = []
 
-	def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], 
-		numOfInputs: int, numOfOutputs: int, parents=[]):
-		
-		# for i in range(self.populationSize):
-		genome = self.newGenome(neurons, links)
-		genome.parents = [genome]
-
 
 	def randomInitialization(self) -> List[Genome]:
 		randomPop: List[Genome] = []
@@ -57,7 +50,7 @@ class MapElites(Population):
 
 	def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
 		
-		genome = Genome(self.currentGenomeID, neurons, links, len(self.inputs), len(self.outputs), parents)
+		genome = Genome(self.currentGenomeID, neurons, links, parents)
 		# self.genomes.append(genome)
 		self.currentGenomeID += 1
 

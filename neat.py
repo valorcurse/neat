@@ -7,14 +7,15 @@ import math
 import numpy as np
 from enum import Enum
 
+import itertools
 from copy import copy
 from copy import deepcopy
-import itertools
 from operator import attrgetter
+from collections import OrderedDict
 
 from prettytable import PrettyTable
 
-from xarray import DataArray
+import pickle
 
 # import genes
 from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, innovations, MutationRates, Phase, SpeciationType
@@ -42,52 +43,55 @@ class NEAT:
         self.milestone: float = 0.01
 
         # CPPNs take 4 inputs, gotta move this somewhere else
-        nrOfInputs = 4
+
 
         inputs = []
-        for n in range(numOfInputs):
-            print("\rCreating inputs neurons (" + str(n + 1) + "/" + str(numOfInputs) + ")", end='')
-            newInput = innovations.createNewNeuron(0.0, NeuronType.INPUT, fromNeuron = None, toNeuron = None, neuronID = -n-1)
+        cppnInputs = 4
+        for n in range(cppnInputs):
+            print("\rCreating inputs neurons (" + str(n + 1) + "/" + str(cppnInputs) + ")", end='')
+            
+            newInput = innovations.createNewNeuron(-1.0, NeuronType.INPUT, fromNeuron = None, toNeuron = None, neuronID = -n-1)
             inputs.append(newInput)
 
-        inputs.append(innovations.createNewNeuron(1.0, NeuronType.BIAS, fromNeuron = None, toNeuron = None, neuronID = -len(inputs)-1))
+        inputs.append(innovations.createNewNeuron(-1.0, NeuronType.BIAS, fromNeuron = None, toNeuron = None, neuronID = -len(inputs)-1))
         print("")
 
         # outputs = [innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)]
-        for n in range(numOfOutputs):
-            print("\rCreating output neurons (" + str(n + 1) + "/" + str(numOfOutputs) + ")", end='')
+        outputs = []
+        cppnOutputs = 1
+        for n in range(cppnOutputs):
+            print("\rCreating output neurons (" + str(n + 1) + "/" + str(cppnOutputs) + ")", end='')
             newOutput = innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)
             outputs.append(newOutput)
 
         print("")
 
+    
         links: List[LinkGene] = []
-
-        leftPadding = math.ceil((len(inputs) - numOfOutputs)/2)
-        rightPadding = (len(inputs) - numOfOutputs) - leftPadding
-        
-        hiddenNodes = [innovations.createNewNeuron(1.0, NeuronType.HIDDEN) for i in range(len(inputs))]
-        paddedOutputs = np.pad(outputs, (leftPadding, rightPadding), 'constant', constant_values=(None, None)).tolist()
-
-        # nodes = np.row_stack((inputs, hiddenNodes, paddedOutputs)) 
-        nodes = np.array([inputs, hiddenNodes, paddedOutputs]) 
-            
-        nrOfLayers: int = nodes.shape[0]
-
-        self.substrate = np.meshgrid(
-            np.linspace(-1.0, 1.0, num=nrOfLayers), 
-            np.linspace(-1.0, 1.0, num=len(inputs)), sparse=False, indexing='xy')
-
-        # self.substrate: DataArray = DataArray(nodes, 
-        #     coords=[np.linspace(-1.0, 1.0, num=nrOfLayers), np.linspace(-1.0, 1.0, num=len(inputs))], dims=['x', 'y'])
-        
 
         # self.population = DefaultPopulation(numberOfGenomes, mutationRates)
         self.population = MapElites(numberOfGenomes, inputs, outputs, mutationRates, populationConfiguration)
-        self.population.initiate(inputs, links, numOfInputs, numOfOutputs)
+        # self.population.initiate(inputs + outputs, links, cppnInputs, cppnOutputs)
 
+        # Substrate
 
-        print("")
+        nrOfLayers: int = 3
+        hiddenLayersWidth: int = numOfInputs
+
+        self.substrateNeurons: List[NeuronGene] = []
+        for y in np.linspace(-1.0, 1.0, num=nrOfLayers):
+                
+            if y == -1.0:
+                for x in np.linspace(-1.0, 1.0, num=numOfInputs):
+                    self.substrateNeurons.append(NeuronGene(NeuronType.INPUT, -1, -1, y, x))        
+
+            elif y == 1.0:
+                for x in np.linspace(-1.0, 1.0, num=numOfOutputs):
+                    self.substrateNeurons.append(NeuronGene(NeuronType.OUTPUT, -1, -1, y, x))
+            
+            else:
+                for x in np.linspace(-1.0, 1.0, num=hiddenLayersWidth):
+                    self.substrateNeurons.append(NeuronGene(NeuronType.HIDDEN, -1, -1, y, x))
 
 
         # mpc = self.calculateMPC()
@@ -172,28 +176,42 @@ class NEAT:
             portionOfFitness: float = 1.0 if allFitnesses == 0.0 and sumOfFitnesses == 0.0 else sumOfFitnesses/allFitnesses
             s.numToSpawn = int(self.population.populationSize * portionOfFitness)
 
-    def getCandidate(self) -> Genome:
-        cppn = self.population.reproduce().createPhenotype()
-        candidate = Genome()
+    def getCandidate(self):
+        print("########################### cppn ###########################")
+        cppn = self.population.reproduce()
 
-        layers = np.array(list(zip(*self.substrate)))
+        print("Links: %d"%len(cppn.links))
 
-        for y in range(len(layers)-1):
-            coords = list(zip(*layers[y]))
-            nextLayers = np.array(layers[np.arange(y+1, layers.shape[0])])
+        cppnPheno = cppn.createPhenotype()
+        print("############################################################")
 
-            for coord in coords:
-                for nextLayer in nextLayers:
-                    for nextCoord in list(zip(*nextLayer)):
-                        coordsInput = [coord[0], coord[1], nextCoord[0], nextCoord[1]]
-                        print(coordsInput)
-                        
-                        output = cppn.update(coordsInput)  
-                        print(output)
+        substrateGenome: Genome = Genome(cppn.ID, self.substrateNeurons, [])
+        links = []
+        for i in range(0, len(substrateGenome.neurons) - 1):
+            neuron = substrateGenome.neurons[i]
+            
+            for j in range(i+1, len(substrateGenome.neurons)):
+                otherNeuron = substrateGenome.neurons[j]
 
+                if (neuron.y == otherNeuron.y):
+                    continue
+                
+                coordsInput = [neuron.x, neuron.y, otherNeuron.x, otherNeuron.y]
+                output = cppnPheno.update(coordsInput)
 
-        return None
+                if output[0] >= 0.2:
+                    # print(output)
+                    links.append(LinkGene(neuron, otherNeuron, -1, output))
 
+        
+        # print("links: %d"%(len(links)))
+
+        substrateGenome.links = links
+
+        return [
+            cppn,
+            substrateGenome
+        ]
 
     def updateCandidate(self, candidate, fitness, features) -> bool:
         return self.population.updateArchive(candidate, fitness, features)

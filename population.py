@@ -241,7 +241,7 @@ class Population:
             if (link.toNeuron.innovationID not in [n.innovationID for n in babyNeurons]):
                 babyNeurons.append(pickle.loads(pickle.dumps(link.toNeuron, -1)))
 
-        babyNeurons.sort(key=lambda x: x.splitY, reverse=False)
+        babyNeurons.sort(key=lambda x: x.y, reverse=False)
 
         return self.newGenome(babyNeurons, babyLinks, [mum, dad])
 
