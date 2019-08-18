@@ -42,39 +42,38 @@ class NEAT:
 
         self.milestone: float = 0.01
 
-        # CPPNs take 4 inputs, gotta move this somewhere else
 
 
-        inputs = []
-        cppnInputs = 4
-        for n in range(cppnInputs):
-            print("\rCreating inputs neurons (" + str(n + 1) + "/" + str(cppnInputs) + ")", end='')
+        # inputs = []
+        # for n in range(cppnInputs):
+        #     print("\rCreating inputs neurons (" + str(n + 1) + "/" + str(cppnInputs) + ")", end='')
             
-            newInput = innovations.createNewNeuron(-1.0, NeuronType.INPUT, fromNeuron = None, toNeuron = None, neuronID = -n-1)
-            inputs.append(newInput)
+        #     newInput = innovations.createNewNeuron(-1.0, NeuronType.INPUT, fromNeuron = None, toNeuron = None, neuronID = -n-1)
+        #     inputs.append(newInput)
 
-        inputs.append(innovations.createNewNeuron(-1.0, NeuronType.BIAS, fromNeuron = None, toNeuron = None, neuronID = -len(inputs)-1))
-        print("")
+        # inputs.append(innovations.createNewNeuron(-1.0, NeuronType.BIAS, fromNeuron = None, toNeuron = None, neuronID = -len(inputs)-1))
+        # print("")
 
-        # outputs = [innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)]
-        outputs = []
-        cppnOutputs = 1
-        for n in range(cppnOutputs):
-            print("\rCreating output neurons (" + str(n + 1) + "/" + str(cppnOutputs) + ")", end='')
-            newOutput = innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)
-            outputs.append(newOutput)
+        # # outputs = [innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)]
+        # outputs = []
+        # for n in range(cppnOutputs):
+        #     print("\rCreating output neurons (" + str(n + 1) + "/" + str(cppnOutputs) + ")", end='')
+        #     newOutput = innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)
+        #     outputs.append(newOutput)
 
-        print("")
+        # print("")
 
     
         links: List[LinkGene] = []
 
+        # CPPNs take 4 inputs, gotta move this somewhere else
+        cppnInputs = 4
+        cppnOutputs = 1
+
         # self.population = DefaultPopulation(numberOfGenomes, mutationRates)
-        self.population = MapElites(numberOfGenomes, inputs, outputs, mutationRates, populationConfiguration)
-        # self.population.initiate(inputs + outputs, links, cppnInputs, cppnOutputs)
+        self.population = MapElites(numberOfGenomes, cppnInputs, cppnOutputs, mutationRates, populationConfiguration)
 
         # Substrate
-
         nrOfLayers: int = 3
         hiddenLayersWidth: int = numOfInputs
 
@@ -185,7 +184,10 @@ class NEAT:
         cppnPheno = cppn.createPhenotype()
         print("############################################################")
 
-        substrateGenome: Genome = Genome(cppn.ID, self.substrateNeurons, [])
+        nrOfInputs = len([n for n in self.substrateNeurons if n.neuronType == NeuronType.INPUT])
+        nrOfOutputs = len([n for n in self.substrateNeurons if n.neuronType == NeuronType.OUTPUT])
+
+        substrateGenome: Genome = Genome(cppn.ID, nrOfInputs, nrOfOutputs, self.substrateNeurons)
         links = []
         for i in range(0, len(substrateGenome.neurons) - 1):
             neuron = substrateGenome.neurons[i]

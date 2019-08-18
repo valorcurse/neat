@@ -23,7 +23,11 @@ class MapElitesConfiguration(PopulationConfiguration):
 
 class MapElites(Population):
 
-	def __init__(self, populationSize: int, inputs: List[NeuronGene], outputs: List[NeuronGene], 
+	# def __init__(self, populationSize: int, inputs: List[NeuronGene], outputs: List[NeuronGene], 
+	# 	mutationRates: MutationRates, configuration: MapElitesConfiguration):
+
+
+	def __init__(self, populationSize: int, inputs: int, outputs: int, 
 		mutationRates: MutationRates, configuration: MapElitesConfiguration):
 		
 		super().__init__(populationSize, mutationRates)
@@ -41,27 +45,25 @@ class MapElites(Population):
 	def randomInitialization(self) -> List[Genome]:
 		randomPop: List[Genome] = []
 		for _ in range(100):
-			genome: Genome = self.newGenome(self.inputs + self.outputs, [])
+			genome: Genome = self.newGenome()
 			for _ in range(50):
 				genome.mutate(Phase.COMPLEXIFYING, self.mutationRates)
 			randomPop.append(genome)
 
 		return randomPop
 
-	def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
-		
-		genome = Genome(self.currentGenomeID, neurons, links, parents)
-		# self.genomes.append(genome)
+	def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):				
+		genome = Genome(self.currentGenomeID, self.inputs, self.outputs, neurons, links, parents)
 		self.currentGenomeID += 1
 
 		return genome
 
-	# @profile
 	def reproduce(self):
 
 		if len(self.archivedGenomes) == 0:
-			newGenome = self.newGenome(self.inputs + self.outputs, [])
+			newGenome = self.newGenome()
 			self.archivedGenomes.append(newGenome)
+			
 			return newGenome
 
 		member = random.choice(self.archivedGenomes)

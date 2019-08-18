@@ -19,7 +19,7 @@ class NeuronType(Enum):
 
 
 class SNeuron:
-    def __init__(self, neuronType: NeuronType, neuronID: int, activation: Callable[[float], float],  y: float) -> None:
+    def __init__(self, neuronType: NeuronType, neuronID: int, activation: Callable[[float], float],  y: float, x: float) -> None:
         self.linksIn: List[SLink] = []
 
         self.activation = activation
@@ -29,9 +29,8 @@ class SNeuron:
 
         self.ID = neuronID
 
-        self.posX: float = 0.0
-        self.posY: float = 0.0
-        self.splitY = y
+        self.y = y
+        self.x = x
 
     def activate(self, x: float) -> float:
         return self.activation(x)

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from typing import List, Set, Dict, Tuple, Optional, Any
 
+from icontract import invariant, require, ensure
+
 import random
 from random import randint
 
 import math
 from math import cos, sin, atan, ceil, floor
 from sklearn.preprocessing import normalize
+
 from enum import Enum
 import itertools
 import pickle
@@ -95,6 +98,9 @@ class NeuronGene:
 
         self.activations = [self.sigmoid, self.tanh, self.sin, self.cos, self.gaussian]
 
+    def __repr__(self):
+        return "NeuronGene(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
+
     def sigmoid(self, x: float) -> float:
         return 1.0 / (1.0 + math.exp(-x))   # Sigmoid
     
@@ -174,7 +180,7 @@ class Innovations:
         return ID;
 
     def createNewNeuron(self, y: float, neuronType: NeuronType, fromNeuron: Optional[NeuronGene] = None, 
-        toNeuron: Optional[NeuronGene] = None, neuronID: Optional[int] = None) -> NeuronGene:
+            toNeuron: Optional[NeuronGene] = None, neuronID: Optional[int] = None) -> NeuronGene:
         
         if (neuronID is None):
             neuronID = self.currentNeuronID
@@ -218,14 +224,29 @@ class Innovations:
 global innovations
 innovations = Innovations()
 
+@invariant(lambda self: len([n for n in self.neurons if n.neuronType == NeuronType.INPUT]) == self.inputs, ValueError("Number of INPUT neurons incorrect."))
+@invariant(lambda self: len([n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]) == self.outputs, ValueError("Number of OUTPUT neurons incorrect."))
 class Genome:
 
-    def __init__(self, ID: int, neurons: List[NeuronGene], links: List[LinkGene], parents: List[Genome]=[]) -> None:
+    def __init__(self, ID: int, inputs: int, outputs: int, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents: List[Genome]=[]) -> None:
         self.ID = ID
         self.parents = parents
 
         self.links = pickle.loads(pickle.dumps(links, -1))
-        self.neurons = pickle.loads(pickle.dumps(neurons, -1))
+        
+
+        self.inputs = inputs
+        self.outputs = outputs
+        self.neurons: List[NeuronGene] = []
+
+        if len(neurons) == 0:
+            print("Adding neurons")
+            for _ in range(self.inputs):
+                self._addNeuron(NeuronType.INPUT)
+            for _ in range(self.outputs):
+                self._addNeuron(NeuronType.OUTPUT)
+        else:
+            self.neurons = pickle.loads(pickle.dumps(neurons, -1))
 
         self.fitness: float = 0.0
         self.adjustedFitness: float = 0.0
@@ -236,7 +257,7 @@ class Genome:
         # For printing
         self.distance: float = 0.0
         
-        self.species: Optional[Species] = None            
+        self.species: Optional[Species] = None
 
     def __lt__(self, other: Genome) -> bool:
         return self.fitness < other.fitness
@@ -387,12 +408,29 @@ class Genome:
         if toNeuron.neuronType == NeuronType.HIDDEN and not self.isNeuronValid(toNeuron):
             self.removeNeuron(toNeuron)
 
-
-    def addNeuron(self, neuronType: NeuronType, y: float) -> None:
+    @require(lambda neuronType, fromNeuron, toNeuron: False if neuronType == NeuronType.HIDDEN and fromNeuron is not None or toNeuron is not None else True)
+    def _addNeuron(self, neuronType: NeuronType, fromNeuron: Optional[NeuronGene] = None, toNeuron: Optional[NeuronGene] = None) -> NeuronGene:
+        y = None
         
-        newNeuron = innovations.createNewNeuron(newDepth, NeuronType.HIDDEN, fromNeuron, toNeuron)
+        if neuronType == NeuronType.INPUT:
+            y = -1.0
+        elif neuronType == NeuronType.OUTPUT:
+            y = 1.0
+        else:
+            y = (fromNeuron.y + toNeuron.y) / 2
+
+
+        newNeuron = innovations.createNewNeuron(y, neuronType, fromNeuron, toNeuron)
+        print(newNeuron)
         self.neurons.append(newNeuron)
+
+        sameYNeurons = [n for n in self.neurons if n.y == y]
+        for n, x in zip(sameYNeurons, np.linspace(-1.0, 1.0, num=len(sameYNeurons))):
+            n.x = x
+
         self.neurons.sort(key=lambda x: x.y, reverse=False)
+
+        return newNeuron
 
     def addRandomNeuron(self) -> None:
 
@@ -413,18 +451,12 @@ class Genome:
         fromNeuron = chosenLink.fromNeuron
         toNeuron = chosenLink.toNeuron
 
-        newDepth = (fromNeuron.y + toNeuron.y) / 2
-
-        newNeuron = innovations.createNewNeuron(newDepth, NeuronType.HIDDEN, fromNeuron, toNeuron)
+        newNeuron = self._addNeuron(NeuronType.HIDDEN, fromNeuron, toNeuron)
 
         self.addLink(fromNeuron, newNeuron)
         self.addLink(newNeuron, toNeuron)
 
         self.removeLink(chosenLink)
-
-        self.neurons.append(newNeuron)
-        self.neurons.sort(key=lambda x: x.y, reverse=False)
-
 
     def removeRandomNeuron(self) -> None:
         # Get all the hidden neurons which do not have multiple incoming AND outgoing links
@@ -585,7 +617,8 @@ class Genome:
             newNeuron = SNeuron(neuron.neuronType,
                         neuron.ID,
                         neuron.activation,
-                        neuron.y)
+                        neuron.y,
+                        neuron.x)
             phenotypeNeurons.append(newNeuron)
 
         for link in self.links:
