@@ -25,6 +25,7 @@ from prettytable import PrettyTable
 
 from neat.phenotypes import CNeuralNet, SLink, SNeuron, NeuronType
 from neat.innovations import Innovations, Innovation
+from neat.utils import find
 
 class Species:
     pass
@@ -167,7 +168,6 @@ class Genome:
         self.neurons: List[NeuronGene] = []
 
         if len(neurons) == 0:
-            print("Adding neurons")
             for _ in range(self.inputs):
                 self._addNeuron(NeuronType.INPUT)
             for _ in range(self.outputs):
@@ -525,17 +525,10 @@ class Genome:
     def createPhenotype(self) -> CNeuralNet:
         phenotypeNeurons: List[SNeuron] = []
 
-        for neuronGene in [n for n in self.neurons if n.neuronType != NeuronType.HIDDEN]:
-            newNeuron = SNeuron(neuronGene)
-            # phenotypeNeurons.append(newNeuron)
-
-
-
         nodesVisited = []
-        queue = Queue()
+        queue: Queue = Queue()
         for neuronGene in [n for n in self.neurons if n.neuronType != NeuronType.HIDDEN]:
             newNeuron = SNeuron(neuronGene)
-            nodesVisited.append(newNeuron.ID)
             queue.put(newNeuron)
             
 
@@ -545,13 +538,19 @@ class Genome:
             phenotypeNeurons.append(node)
             nodesVisited.append(node.ID)
 
-            for l in [l for l in self.links if node.ID == l.toNeuron.ID]:
-                phenoLink = SLink(l.fromNeuron, l.toNeuron, l.weight)
+            for link in [l for l in self.links if node.ID == l.toNeuron.ID]:
+                fromNeuron = None
+                if link.fromNeuron.ID not in nodesVisited:
+                    fromNeuron = SNeuron(link.fromNeuron)
+                    queue.put(SNeuron(link.fromNeuron))
+
+                else:
+                    fromNeuron = find(lambda n: n.ID == link.fromNeuron.ID, phenotypeNeurons)
+
+                phenoLink = SLink(fromNeuron, node, link.weight)
 
                 node.linksIn.append(phenoLink)
 
-                if l.fromNeuron.ID not in nodesVisited:
-                    queue.put(SNeuron(l.fromNeuron))
-
+                    
         return CNeuralNet(phenotypeNeurons, self.ID)
 

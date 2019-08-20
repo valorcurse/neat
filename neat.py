@@ -177,46 +177,5 @@ class NEAT:
             portionOfFitness: float = 1.0 if allFitnesses == 0.0 and sumOfFitnesses == 0.0 else sumOfFitnesses/allFitnesses
             s.numToSpawn = int(self.population.populationSize * portionOfFitness)
 
-    def getCandidate(self):
-        print("########################### cppn ###########################")
-        cppn = self.population.reproduce()
-
-        print("Links: %d"%len(cppn.links))
-
-        cppnPheno = cppn.createPhenotype()
-        # print("############################################################")
-
-        nrOfInputs = len([n for n in self.substrateNeurons if n.neuronType == NeuronType.INPUT])
-        nrOfOutputs = len([n for n in self.substrateNeurons if n.neuronType == NeuronType.OUTPUT])
-
-        substrateGenome: Genome = Genome(cppn.ID, nrOfInputs, nrOfOutputs, self.innovations, deepcopy(self.substrateNeurons))
-        links = []
-        for i in range(0, len(substrateGenome.neurons) - 1):
-            neuron = substrateGenome.neurons[i]
-            
-            for j in range(i+1, len(substrateGenome.neurons)):
-                otherNeuron = substrateGenome.neurons[j]
-
-                if (neuron.y == otherNeuron.y):
-                    continue
-                
-                coordsInput = [neuron.x, neuron.y, otherNeuron.x, otherNeuron.y]
-                output = cppnPheno.update(coordsInput)
-                if output[0] >= 0.2 or output[0] <= -0.2:
-                    links.append(LinkGene(neuron, otherNeuron, -1, output))
-
-        
-        # print("links: %d"%(len(links)))
-
-        substrateGenome.links = links
-
-        print("########################### substrate ###########################")
-        print("Links: %d"%len(substrateGenome.links))
-        print("############################################################")        
-        return [
-            cppn,
-            substrateGenome
-        ]
-
     def updateCandidate(self, candidate, fitness, features) -> bool:
         return self.population.updateArchive(candidate, fitness, features)

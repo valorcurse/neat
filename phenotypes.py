@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from typing import List, Set, Dict, Tuple, Optional, Any, Callable
+from icontract import invariant, require, ensure
 from enum import Enum
 
 import math
 from math import cos, sin, atan, ceil, floor
+from queue import Queue
 
 from scipy import special
 
@@ -22,22 +24,25 @@ class NeuronType(Enum):
 
 
 class SNeuron:
-    # def __init__(self, neuronType: NeuronType, neuronID: int, activation: Callable[[float], float],  y: float, x: float) -> None:
+    
     def __init__(self, neuronGene: genes.NeuronGene) -> None:
         self.linksIn: List[SLink] = []
 
         self.activation = neuronGene.activation
-        self.output = 1.0 if neuronGene.neuronType == NeuronType.BIAS else 0.0
+        self.output: float = 1.0 if neuronGene.neuronType == NeuronType.BIAS else 0.0
 
         self.neuronType = neuronGene.neuronType
 
-        self.ID = neuronGene.ID
+        self.ID: int = neuronGene.ID
 
-        self.y = neuronGene.y
-        self.x = neuronGene.x
+        self.y: float = neuronGene.y
+        self.x: float = neuronGene.x
 
     def activate(self, x: float) -> float:
         return self.activation(x)
+
+    def __repr__(self):
+        return "SNeuron(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
 
 class SLink:
 
@@ -49,6 +54,7 @@ class SLink:
 
         self.recurrent = recurrent
 
+# @invariant(lambda self: all(isinstance(x, SNeuron) for x in self.neurons), ValueError("Some neurons are not of type SNeuron."))
 class CNeuralNet:
 
     def __init__(self, neurons: List[SNeuron], ID: int) -> None:
@@ -79,7 +85,8 @@ class CNeuralNet:
             return neuron.output
 
     def update(self, inputs: List[float]) -> List[float]:
-        return self.updateRecursively(inputs)
+        # return self.updateRecursively(inputs)
+        return self.updateIteratively(inputs)
 
     def updateRecursively(self, inputs: List[float]) -> List[float]:
         inputNeurons = [neuron for neuron in self.neurons if neuron.neuronType == NeuronType.INPUT]
@@ -91,24 +98,28 @@ class CNeuralNet:
         return [self.calcOutput(outputNeuron) for outputNeuron in outputNeurons]
 
     def updateIteratively(self, inputs: List[float]) -> List[float]:
+        queue: Queue = Queue()
+
         # Set input neurons values
         inputNeurons = [neuron for neuron in self.neurons if neuron.neuronType == NeuronType.INPUT]
         for value, neuron in zip(inputs, inputNeurons):
             neuron.output = value
 
-        inputNeurons += [neuron for neuron in self.neurons if neuron.neuronType == NeuronType.BIAS]
+        for n in [neuron for neuron in self.neurons if neuron.neuronType in [NeuronType.INPUT, NeuronType.BIAS]]:
+            queue.put(neuron)
 
-        for currentNeuron in self.neurons[len(inputNeurons):]:
-            linksIn = currentNeuron.linksIn
+        depths = sorted(set([n.y for n in self.neurons]))
 
-            if len(linksIn) == 0:
-                currentNeuron.output = 0.0
-            else:
-                # output = np.sum(np.array([link.fromNeuron.output * link.weight for link in linksIn]))
-                output = np.array([link.fromNeuron.output * link.weight for link in linksIn])
-                # currentNeuron.output = self.activation(currentNeuron.bias + np.sum(output))
-                # currentNeuron.output = self.activation(currentNeuron.bias + np.sum(output))
-                currentNeuron.output = currentNeuron.activate(np.sum(output))
+        # for currentNeuron in self.neurons[len(inputNeurons):]:
+        for depth in depths:
+            neurons = [n for n in self.neurons if n.y == depth]
+
+            for n in neurons:
+                if len(n.linksIn) == 0:
+                    n.output = 0.0
+                else:
+                    output = [link.fromNeuron.output * link.weight for link in n.linksIn]
+                    n.output = n.activate(np.sum(output))
                 
         # print(table)
         return [n.output for n in self.neurons if n.neuronType == NeuronType.OUTPUT]
