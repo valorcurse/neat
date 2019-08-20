@@ -18,18 +18,20 @@ from prettytable import PrettyTable
 import pickle
 
 # import genes
-from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, innovations, MutationRates, Phase, SpeciationType
+from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 from neat.phenotypes import CNeuralNet
 # from neat.population import PopulationConfiguration
 # from neat.defaultPopulation import DefaultPopulation
 from neat.mapelites import MapElites, MapElitesConfiguration
+from neat.innovations import Innovations
 
-global innovations
 
 class NEAT:
 
     def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int,
         populationConfiguration: MapElitesConfiguration, mutationRates: MutationRates=MutationRates()) -> None:
+
+        self.innovations = Innovations()
 
         self.mutationRates: MutationRates = mutationRates
         self.phenotypes: List[CNeuralNet] = []
@@ -71,7 +73,7 @@ class NEAT:
         cppnOutputs = 1
 
         # self.population = DefaultPopulation(numberOfGenomes, mutationRates)
-        self.population = MapElites(numberOfGenomes, cppnInputs, cppnOutputs, mutationRates, populationConfiguration)
+        self.population = MapElites(numberOfGenomes, cppnInputs, cppnOutputs, self.innovations, mutationRates, populationConfiguration)
 
         # Substrate
         nrOfLayers: int = 3
@@ -82,15 +84,15 @@ class NEAT:
                 
             if y == -1.0:
                 for x in np.linspace(-1.0, 1.0, num=numOfInputs):
-                    self.substrateNeurons.append(NeuronGene(NeuronType.INPUT, -1, -1, y, x))        
+                    self.substrateNeurons.append(NeuronGene(NeuronType.INPUT, -1, y, x))        
 
             elif y == 1.0:
                 for x in np.linspace(-1.0, 1.0, num=numOfOutputs):
-                    self.substrateNeurons.append(NeuronGene(NeuronType.OUTPUT, -1, -1, y, x))
+                    self.substrateNeurons.append(NeuronGene(NeuronType.OUTPUT, -1, y, x))
             
             else:
                 for x in np.linspace(-1.0, 1.0, num=hiddenLayersWidth):
-                    self.substrateNeurons.append(NeuronGene(NeuronType.HIDDEN, -1, -1, y, x))
+                    self.substrateNeurons.append(NeuronGene(NeuronType.HIDDEN, -1, y, x))
 
 
         # mpc = self.calculateMPC()
@@ -182,12 +184,12 @@ class NEAT:
         print("Links: %d"%len(cppn.links))
 
         cppnPheno = cppn.createPhenotype()
-        print("############################################################")
+        # print("############################################################")
 
         nrOfInputs = len([n for n in self.substrateNeurons if n.neuronType == NeuronType.INPUT])
         nrOfOutputs = len([n for n in self.substrateNeurons if n.neuronType == NeuronType.OUTPUT])
 
-        substrateGenome: Genome = Genome(cppn.ID, nrOfInputs, nrOfOutputs, self.substrateNeurons)
+        substrateGenome: Genome = Genome(cppn.ID, nrOfInputs, nrOfOutputs, self.innovations, deepcopy(self.substrateNeurons))
         links = []
         for i in range(0, len(substrateGenome.neurons) - 1):
             neuron = substrateGenome.neurons[i]
@@ -200,9 +202,7 @@ class NEAT:
                 
                 coordsInput = [neuron.x, neuron.y, otherNeuron.x, otherNeuron.y]
                 output = cppnPheno.update(coordsInput)
-
-                if output[0] >= 0.2:
-                    # print(output)
+                if output[0] >= 0.2 or output[0] <= -0.2:
                     links.append(LinkGene(neuron, otherNeuron, -1, output))
 
         
@@ -210,6 +210,9 @@ class NEAT:
 
         substrateGenome.links = links
 
+        print("########################### substrate ###########################")
+        print("Links: %d"%len(substrateGenome.links))
+        print("############################################################")        
         return [
             cppn,
             substrateGenome

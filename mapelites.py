@@ -3,6 +3,7 @@ from typing import List, Dict, Optional, Tuple, Text
 from neat.population import Population, PopulationConfiguration
 from neat.neat import MutationRates
 from neat.genes import Genome, NeuronGene, LinkGene, Phase
+from neat.innovations import Innovations
 
 import random
 import numpy as np
@@ -27,12 +28,13 @@ class MapElites(Population):
 	# 	mutationRates: MutationRates, configuration: MapElitesConfiguration):
 
 
-	def __init__(self, populationSize: int, inputs: int, outputs: int, 
+	def __init__(self, populationSize: int, inputs: int, outputs: int, innovations: Innovations,
 		mutationRates: MutationRates, configuration: MapElitesConfiguration):
 		
-		super().__init__(populationSize, mutationRates)
+		super().__init__(populationSize, innovations, mutationRates)
 
 		self.configuration = configuration
+		self.innovations = innovations
 
 		self.inputs = inputs
 		self.outputs = outputs
@@ -53,7 +55,7 @@ class MapElites(Population):
 		return randomPop
 
 	def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):				
-		genome = Genome(self.currentGenomeID, self.inputs, self.outputs, neurons, links, parents)
+		genome = Genome(self.currentGenomeID, self.inputs, self.outputs, self.innovations, neurons, links, parents)
 		self.currentGenomeID += 1
 
 		return genome

@@ -10,6 +10,9 @@ from scipy import special
 
 import numpy as np
 
+# from neat.genes import NeuronGene
+import neat.genes as genes
+
 class NeuronType(Enum):
     INPUT = 0
     HIDDEN = 1
@@ -19,18 +22,19 @@ class NeuronType(Enum):
 
 
 class SNeuron:
-    def __init__(self, neuronType: NeuronType, neuronID: int, activation: Callable[[float], float],  y: float, x: float) -> None:
+    # def __init__(self, neuronType: NeuronType, neuronID: int, activation: Callable[[float], float],  y: float, x: float) -> None:
+    def __init__(self, neuronGene: genes.NeuronGene) -> None:
         self.linksIn: List[SLink] = []
 
-        self.activation = activation
-        self.output = 1.0 if neuronType == NeuronType.BIAS else 0.0
+        self.activation = neuronGene.activation
+        self.output = 1.0 if neuronGene.neuronType == NeuronType.BIAS else 0.0
 
-        self.neuronType = neuronType
+        self.neuronType = neuronGene.neuronType
 
-        self.ID = neuronID
+        self.ID = neuronGene.ID
 
-        self.y = y
-        self.x = x
+        self.y = neuronGene.y
+        self.x = neuronGene.x
 
     def activate(self, x: float) -> float:
         return self.activation(x)

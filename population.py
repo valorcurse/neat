@@ -5,6 +5,7 @@ import pickle
 
 from neat.neat import MutationRates
 from neat.genes import Genome, NeuronType, LinkGene, NeuronGene
+from neat.innovations import Innovations
 
 class Species:
     numGensAllowNoImprovement = 20
@@ -88,18 +89,17 @@ class PopulationConfiguration:
 
 class Population:
 
-    def __init__(self, populationSize: int, mutationRates: MutationRates):
+    def __init__(self, populationSize: int, innovations: Innovations, mutationRates: MutationRates):
         self.genomes: List[Genome] = []
         
         self.species: List[Species] = []
         self.speciesNumber: int = 0
 
+        self.innovations = innovations
         self.mutationRates = mutationRates
 
         self.currentGenomeID: int = 0
         self.populationSize: int = populationSize
-
-        self.genomes: List[Genome] = []
 
         self.averageInterspeciesDistance: float = 0.0
         self.numOfInputs = 0
@@ -117,7 +117,7 @@ class Population:
 
     def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
     	
-    	genome = Genome(self.currentGenomeID, neurons, links, self.numOfInputs, self.numOfOutputs, parents)
+    	genome = Genome(self.currentGenomeID, self.numOfInputs, self.numOfOutputs, self.innovations, neurons, links, parents)
     	self.genomes.append(genome)
     	self.currentGenomeID += 1
 
@@ -206,17 +206,16 @@ class Population:
             best = mum if mum.fitness > dad.fitness else dad
 
         # Copy input and output neurons
-        babyNeurons = [pickle.loads(pickle.dumps(n, -1)) for n in best.neurons
-                       if (n.neuronType in [NeuronType.INPUT, NeuronType.OUTPUT])]
+        babyNeurons = [pickle.loads(pickle.dumps(n, -1)) for n in best.neurons if (n.neuronType != NeuronType.HIDDEN)]
 
         combinedIndexes = list(set(
-            [l.innovationID for l in mum.links] + [l.innovationID for l in dad.links]))
+            [l.ID for l in mum.links] + [l.ID for l in dad.links]))
         combinedIndexes.sort()
         
-        mumDict: Dict[int, LinkGene] = {l.innovationID: l for l in mum.links}
-        dadDict: Dict[int, LinkGene] = {l.innovationID: l for l in dad.links}
+        mumDict: Dict[int, LinkGene] = {l.ID: l for l in mum.links}
+        dadDict: Dict[int, LinkGene] = {l.ID: l for l in dad.links}
 
-        # print("-------------------------------------------------")
+        # Crossover the links
         babyLinks: List[LinkGene] = []
         for i in combinedIndexes:
             mumLink: Optional[LinkGene] = mumDict.get(i)
@@ -233,12 +232,13 @@ class Population:
             else:
                 babyLinks.append(random.choice([mumLink, dadLink]))
 
+        # Copy the neurons connected to the crossedover links
         for link in babyLinks:
 
-            if (link.fromNeuron.innovationID not in [n.innovationID for n in babyNeurons]):
+            if (link.fromNeuron.ID not in [n.ID for n in babyNeurons]):
                 babyNeurons.append(pickle.loads(pickle.dumps(link.fromNeuron, -1)))
 
-            if (link.toNeuron.innovationID not in [n.innovationID for n in babyNeurons]):
+            if (link.toNeuron.ID not in [n.ID for n in babyNeurons]):
                 babyNeurons.append(pickle.loads(pickle.dumps(link.toNeuron, -1)))
 
         babyNeurons.sort(key=lambda x: x.y, reverse=False)
