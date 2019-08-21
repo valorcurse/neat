@@ -21,11 +21,11 @@ import pickle
 from neat.phenotypes import Phenotype
 # from neat.innovations import Innovations
 import neat.innovations
+from neat.types import NeuronType
 from neat.mapelites import MapElites, MapElitesConfiguration, MapElitesUpdate
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
 from neat.population import PopulationUpdate, PopulationConfiguration, Population
-from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
-
+from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 
 class NEAT:
 

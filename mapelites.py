@@ -29,7 +29,7 @@ class MapElitesConfiguration(PopulationConfiguration):
 
 class MapElitesUpdate(PopulationUpdate):
 	def __init__(self, fitness: List[float], features: List[List[float]]):
-		self.data = {
+		self._data = {
 			"fitness": fitness,
 			"features": features
 		}

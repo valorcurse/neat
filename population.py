@@ -3,22 +3,51 @@ from typing import List, Dict, Optional, Tuple
 import random
 import pickle
 
+from neat.utils import fastCopy
 from neat.innovations import Innovations
 from neat.genes import Genome, LinkGene, NeuronGene, MutationRates
 import neat.phenotypes as phenos
 
-from neat.utils import fastCopy
+
+from collections.abc import Mapping
 
 class ParameterDict:
-	
     def __init__(self):
         self._data = {}
 
-    def __getitem__(self, key):
-        return self._data[key]
-
     def __getattr__(self, attr):
-        return self._data.get(attr)
+        return self._data[attr]
+
+
+# class ParameterDict(dict):
+	
+#     def __init__(self):
+#         pass
+#         # self._data = {}
+
+
+#     def __getattr__(self, attr):
+#         return self.get(attr)
+
+    # def __getattr__(self, attr):
+    #     return object.__getattribute__(self, "_data")[attr]
+    #     return self._data[attr]
+
+# class ParameterDict(Mapping):
+#     def __init__(self, *args, **kw):
+#         self._storage = dict(*args, **kw)
+    
+#     def __getitem__(self, key):
+#         return self._storage[key]
+
+#     def __getattr__(self, attr):
+#         return self._storage[attr]
+
+#     def __iter__(self):
+#         return iter(self._storage)    # ``ghost`` is invisible
+    
+#     def __len__(self):
+#         return len(self._storage)
 
 class PopulationConfiguration(ParameterDict):
     pass

@@ -24,15 +24,9 @@ import matplotlib.patches as patches
 from prettytable import PrettyTable
 
 import neat.phenotypes
+from neat.types import NeuronType
 from neat.innovations import Innovations, Innovation
 from neat.utils import find, fastCopy
-
-
-class NeuronType(Enum):
-    INPUT = 0
-    HIDDEN = 1
-    BIAS = 2
-    OUTPUT = 3
 
 class Species:
     pass

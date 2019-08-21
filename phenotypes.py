@@ -12,7 +12,8 @@ from scipy import special
 
 import numpy as np
 
-from neat.genes import NeuronGene, NeuronType
+from neat.genes import NeuronGene
+from neat.types import NeuronType
 # import neat.genes as genes
 
 class SNeuron:

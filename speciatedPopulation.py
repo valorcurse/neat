@@ -96,7 +96,7 @@ class SpeciesConfiguration(PopulationConfiguration):
 
 class SpeciesUpdate(PopulationUpdate):
     def __init__(self, fitness: List[float]):
-        self.data = {
+        self._data = {
             "fitness": fitness
         }
 
@@ -115,8 +115,12 @@ class SpeciatedPopulation(Population):
         self.numOfInputs = configuration.n_inputs
         self.numOfOutputs = configuration.n_outputs
 
-        for i in range(self.population_size):
-            self.newGenome()
+        baseGenome = self.newGenome()
+        for i in range(self.population_size - 1):
+            newGenome = fastCopy(baseGenome)
+            newGenome.ID = self.currentGenomeID
+            self.genomes.append(newGenome)
+            self.currentGenomeID += 1
 
     # def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], numOfInputs: int, numOfOutputs: int, parents=[]):
         
@@ -129,6 +133,7 @@ class SpeciatedPopulation(Population):
 
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
+        print(len(update.fitness), len(self.genomes))
         # Set fitness score to their respesctive genome
         for index, genome in enumerate(self.genomes):
             genome.fitness = update.fitness[index]
@@ -269,7 +274,7 @@ class SpeciatedPopulation(Population):
         self.calculateSpawnAmount()
         self.newGeneration()
 
-        print("Gumber of genomes: %d"%len(self.genomes))
+        print("Number of genomes: %d"%len(self.genomes))
 
         self.speciate()
 

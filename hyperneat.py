@@ -4,9 +4,11 @@ import numpy as np
 from copy import deepcopy
 
 from neat.neat import NEAT
+from neat.types import NeuronType
 from neat.phenotypes import Phenotype
 from neat.population import PopulationUpdate, PopulationConfiguration
-from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
+from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
+
 
 class HyperNEAT(NEAT):
 
