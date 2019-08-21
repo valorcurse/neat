@@ -55,7 +55,7 @@ class SLink:
         self.recurrent = recurrent
 
 # @invariant(lambda self: all(isinstance(x, SNeuron) for x in self.neurons), ValueError("Some neurons are not of type SNeuron."))
-class CNeuralNet:
+class Phenotype:
 
     def __init__(self, neurons: List[SNeuron], ID: int) -> None:
         self.neurons = neurons

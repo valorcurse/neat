@@ -23,9 +23,9 @@ import matplotlib.patches as patches
 
 from prettytable import PrettyTable
 
-from neat.phenotypes import CNeuralNet, SLink, SNeuron, NeuronType
+from neat.phenotypes import Phenotype, SLink, SNeuron, NeuronType
 from neat.innovations import Innovations, Innovation
-from neat.utils import find
+from neat.utils import find, fastCopy
 
 class Species:
     pass
@@ -160,7 +160,7 @@ class Genome:
         self.innovations: Innovations = innovations
         self.parents = parents
 
-        self.links = pickle.loads(pickle.dumps(links, -1))
+        self.links = fastCopy(links)
         
 
         self.inputs = inputs
@@ -173,7 +173,7 @@ class Genome:
             for _ in range(self.outputs):
                 self._addNeuron(NeuronType.OUTPUT)
         else:
-            self.neurons = pickle.loads(pickle.dumps(neurons, -1))
+            self.neurons = fastCopy(neurons)
 
         self.fitness: float = 0.0
         self.adjustedFitness: float = 0.0
@@ -484,7 +484,7 @@ class Genome:
             n.activation = random.choice(n.activations)
 
 
-    def mutate(self, phase: Phase, mutationRates: MutationRates) -> None:
+    def mutate(self, mutationRates: MutationRates) -> None:
         # div = max(1,(self.chanceToAddNeuron*2 + self.chanceToAddLink*2))
         # r = random.random()
         # if r < (self.chanceToAddNeuron/div):
@@ -522,7 +522,7 @@ class Genome:
         self.links.sort()
 
 
-    def createPhenotype(self) -> CNeuralNet:
+    def createPhenotype(self) -> Phenotype:
         phenotypeNeurons: List[SNeuron] = []
 
         nodesVisited = []
@@ -552,5 +552,5 @@ class Genome:
                 node.linksIn.append(phenoLink)
 
                     
-        return CNeuralNet(phenotypeNeurons, self.ID)
+        return Phenotype(phenotypeNeurons, self.ID)
 

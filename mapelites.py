@@ -24,14 +24,10 @@ class MapElitesConfiguration(PopulationConfiguration):
 
 class MapElites(Population):
 
-	# def __init__(self, populationSize: int, inputs: List[NeuronGene], outputs: List[NeuronGene], 
-	# 	mutationRates: MutationRates, configuration: MapElitesConfiguration):
-
-
-	def __init__(self, populationSize: int, inputs: int, outputs: int, innovations: Innovations,
+	def __init__(self, inputs: int, outputs: int, innovations: Innovations,
 		mutationRates: MutationRates, configuration: MapElitesConfiguration):
 		
-		super().__init__(populationSize, innovations, mutationRates)
+		super().__init__(innovations, mutationRates)
 
 		self.configuration = configuration
 		self.innovations = innovations
@@ -49,7 +45,7 @@ class MapElites(Population):
 		for _ in range(100):
 			genome: Genome = self.newGenome()
 			for _ in range(50):
-				genome.mutate(Phase.COMPLEXIFYING, self.mutationRates)
+				genome.mutate(self.mutationRates)
 			randomPop.append(genome)
 
 		return randomPop
@@ -60,7 +56,7 @@ class MapElites(Population):
 
 		return genome
 
-	def reproduce(self):
+	def reproduce(self) -> List[Genome]:
 
 		if len(self.archivedGenomes) == 0:
 			newGenome = self.newGenome()
@@ -73,47 +69,50 @@ class MapElites(Population):
 		baby: Optional[Genome] = None
 		if (random.random() > self.mutationRates.crossoverRate):
 			baby = self.newGenome(member.neurons, member.links, member.parents)
-			baby.mutate(Phase.COMPLEXIFYING, self.mutationRates)
+			baby.mutate(self.mutationRates)
+
 		else:
 			otherMember = random.choice(self.archivedGenomes)
 			baby = self.crossover(member, otherMember)
 
-		return baby
+		self.genomes = [baby]
 
-	def updateArchive(self, candidate, fitness, features) -> bool:
+		return self.genomes
 
-		featuresIndexes = []
-		for idx, feature in enumerate(features):
-			archiveFeature = self.configuration.features[idx]
+	def updateFitness(self, fitness: List[float]) -> None:
+		pass
 
-			if feature < archiveFeature.min:
-				archiveFeature.min = feature
-			elif feature > archiveFeature.max:
-				archiveFeature.max = feature
+	def updateArchive(self, fitness: List[float], features) -> None:
 
-			# print("(%f - %f)/(%f - %f))"%(archiveFeature.max, feature, archiveFeature.max, archiveFeature.min))
+		for candidate in self.genomes:
+			featuresIndexes = []
+			for idx, feature in enumerate(features):
+				archiveFeature = self.configuration.features[idx]
 
-			relativePosition: float = (archiveFeature.max - feature)/(archiveFeature.max - archiveFeature.min)
-			index = int(relativePosition * self.configuration.mapResolution)
-			index = max(0, index - 1)
-			featuresIndexes.append(index)
+				if feature < archiveFeature.min:
+					archiveFeature.min = feature
+				elif feature > archiveFeature.max:
+					archiveFeature.max = feature
 
-		tupleIndex = tuple(featuresIndexes)
-		archivedCandidate = self.archive[tupleIndex]
-		archivedPerformance = self.performances[tupleIndex]
+				# print("(%f - %f)/(%f - %f))"%(archiveFeature.max, feature, archiveFeature.max, archiveFeature.min))
 
-		if (fitness > archivedPerformance):
-			if archivedCandidate is not None:
-				self.archivedGenomes.remove(archivedCandidate)
-			
-			self.archive[tupleIndex] = candidate
-			self.archivedGenomes.append(candidate)
+				relativePosition: float = (archiveFeature.max - feature)/(archiveFeature.max - archiveFeature.min)
+				index = int(relativePosition * self.configuration.mapResolution)
+				index = max(0, index - 1)
+				featuresIndexes.append(index)
 
-			self.performances[tupleIndex] = fitness
+			tupleIndex = tuple(featuresIndexes)
+			archivedCandidate = self.archive[tupleIndex]
+			archivedPerformance = self.performances[tupleIndex]
 
-			return True
+			if (fitness > archivedPerformance):
+				if archivedCandidate is not None:
+					self.archivedGenomes.remove(archivedCandidate)
+				
+				self.archive[tupleIndex] = candidate
+				self.archivedGenomes.append(candidate)
 
-		return False
+				self.performances[tupleIndex] = fitness
 
 		# possibleCandidates = self.archive[self.archive != None]
 		# total = pow(self.configuration.mapResolution, len(self.configuration.features))

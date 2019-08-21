@@ -19,9 +19,9 @@ import pickle
 
 # import genes
 from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
-from neat.phenotypes import CNeuralNet
+from neat.phenotypes import Phenotype
 # from neat.population import PopulationConfiguration
-# from neat.defaultPopulation import DefaultPopulation
+# from neat.SpeciatedPopulation import SpeciatedPopulation
 from neat.mapelites import MapElites, MapElitesConfiguration
 from neat.innovations import Innovations
 
@@ -34,10 +34,8 @@ class NEAT:
         self.innovations = Innovations()
 
         self.mutationRates: MutationRates = mutationRates
-        self.phenotypes: List[CNeuralNet] = []
-        
+        self.phenotypes: List[Phenotype] = []
 
-        self.generation: int = 0
 
         self.phase: Phase = Phase.COMPLEXIFYING
         self.speciationType: SpeciationType = SpeciationType.NOVELTY
@@ -46,136 +44,21 @@ class NEAT:
 
 
 
-        # inputs = []
-        # for n in range(cppnInputs):
-        #     print("\rCreating inputs neurons (" + str(n + 1) + "/" + str(cppnInputs) + ")", end='')
-            
-        #     newInput = innovations.createNewNeuron(-1.0, NeuronType.INPUT, fromNeuron = None, toNeuron = None, neuronID = -n-1)
-        #     inputs.append(newInput)
-
-        # inputs.append(innovations.createNewNeuron(-1.0, NeuronType.BIAS, fromNeuron = None, toNeuron = None, neuronID = -len(inputs)-1))
-        # print("")
-
-        # # outputs = [innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)]
-        # outputs = []
-        # for n in range(cppnOutputs):
-        #     print("\rCreating output neurons (" + str(n + 1) + "/" + str(cppnOutputs) + ")", end='')
-        #     newOutput = innovations.createNewNeuron(1.0, NeuronType.OUTPUT, fromNeuron = None, toNeuron = None, neuronID = -numOfInputs-n-1)
-        #     outputs.append(newOutput)
-
-        # print("")
-
-    
         links: List[LinkGene] = []
 
-        # CPPNs take 4 inputs, gotta move this somewhere else
-        cppnInputs = 4
-        cppnOutputs = 1
+        # self.population = SpeciatedPopulation(numberOfGenomes, mutationRates)
+        self.population = MapElites(numberOfGenomes, numOfInputs, numOfOutputs, self.innovations, mutationRates, populationConfiguration)
 
-        # self.population = DefaultPopulation(numberOfGenomes, mutationRates)
-        self.population = MapElites(numberOfGenomes, cppnInputs, cppnOutputs, self.innovations, mutationRates, populationConfiguration)
-
-        # Substrate
-        nrOfLayers: int = 3
-        hiddenLayersWidth: int = numOfInputs
-
-        self.substrateNeurons: List[NeuronGene] = []
-        for y in np.linspace(-1.0, 1.0, num=nrOfLayers):
-                
-            if y == -1.0:
-                for x in np.linspace(-1.0, 1.0, num=numOfInputs):
-                    self.substrateNeurons.append(NeuronGene(NeuronType.INPUT, -1, y, x))        
-
-            elif y == 1.0:
-                for x in np.linspace(-1.0, 1.0, num=numOfOutputs):
-                    self.substrateNeurons.append(NeuronGene(NeuronType.OUTPUT, -1, y, x))
-            
-            else:
-                for x in np.linspace(-1.0, 1.0, num=hiddenLayersWidth):
-                    self.substrateNeurons.append(NeuronGene(NeuronType.HIDDEN, -1, y, x))
-
-
-        # mpc = self.calculateMPC()
-        # mpc = 100
-        # self.mpcThreshold: int = mpc + mutationRates.mpcMargin
-        # self.lowestMPC: int = mpc
-        # self.mpcStagnation: int = 0
+    def epoch(self, fitness: List[float], features: Optional[List[float]] = None) -> List[Phenotype]:
         
-        # print("mpc", mpc)
-        # print("mpc threshold", self.mpcThreshold)
+        self.population.updateFitness(fitness)
 
-        # self.population.speciate()
-        # self.epoch([0]*len(self.population.genomes))
-
-
-    # def calculateMPC(self):
-    #     allMutations = [[n for n in g.neurons] + [l for l in g.links] for g in self.genomes]
-    #     nrOfMutations = len([item for sublist in allMutations for item in sublist])
-    #     return (nrOfMutations / len(self.genomes))
-
-    def epoch(self, fitnessScores: List[float], novelty: Optional[List[float]] = None) -> None:
+        genomes = self.population.reproduce()
         
-        if novelty is not None:
-            for index, genome in enumerate(self.population.genomes):
-                genome.novelty = novelty[index]
-
-        # Set fitness score to their respesctive genome
-        for index, genome in enumerate(self.population.genomes):
-            genome.fitness = fitnessScores[index]
-
-        self.calculateSpawnAmount()
- 
-        self.population.reproduce()
-        
-        self.population.speciate()
-
-        # mpc = self.calculateMPC()
-
-        # if self.phase == Phase.PRUNING:
-        #     if mpc < self.lowestMPC:
-        #         self.lowestMPC = mpc
-        #         self.mpcStagnation = 0
-        #     else:
-        #         self.mpcStagnation += 1
-
-        #     if self.mpcStagnation >= 10:
-        #         self.phase = Phase.COMPLEXIFYING
-        #         self.mpcThreshold = mpc + self.mutationRates.mpcMargin
-
-        # elif self.phase == Phase.COMPLEXIFYING:
-        #     if mpc >= self.mpcThreshold:
-        #         self.phase = Phase.PRUNING
-        #         self.mpcStagnation = 0
-        #         self.lowestMPC = mpc
-
-
         newPhenotypes = []
-        for genome in self.population.genomes:
+        for genome in genomes:
             newPhenotypes.append(genome.createPhenotype())
-
-        self.generation += 1
 
         self.phenotypes = newPhenotypes
 
-
-    def calculateSpawnAmount(self) -> None:
-        # Remove stagnant species
-        # if self.phase == Phase.COMPLEXIFYING:
-        for s in self.population.species:
-            s.becomeOlder(len(self.population.species) == 1)
-
-            if s.stagnant and len(self.population.species) > 1:
-                self.population.species.remove(s)
-        
-        for s in self.population.species:
-            s.adjustFitnesses()
-        
-        allFitnesses = sum([m.adjustedFitness for spc in self.population.species for m in spc.members])
-        for s in self.population.species:
-            sumOfFitnesses: float = sum([m.adjustedFitness for m in s.members])
-
-            portionOfFitness: float = 1.0 if allFitnesses == 0.0 and sumOfFitnesses == 0.0 else sumOfFitnesses/allFitnesses
-            s.numToSpawn = int(self.population.populationSize * portionOfFitness)
-
-    def updateCandidate(self, candidate, fitness, features) -> bool:
-        return self.population.updateArchive(candidate, fitness, features)
+        return self.phenotypes
