@@ -4,14 +4,13 @@ import numpy as np
 from copy import deepcopy
 
 from neat.neat import NEAT
-from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 from neat.phenotypes import Phenotype
-from neat.mapelites import MapElites, MapElitesConfiguration
+from neat.population import PopulationUpdate, PopulationConfiguration
+from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 
 class HyperNEAT(NEAT):
 
-    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int,
-            populationConfiguration: MapElitesConfiguration, mutationRates: MutationRates=MutationRates()):
+    def __init__(self, population_configuration: PopulationConfiguration, mutation_rates: MutationRates=MutationRates()):
         
         # CPPNs take 4 inputs, gotta move this somewhere else
         nrOfLayers: int = 3
@@ -19,20 +18,20 @@ class HyperNEAT(NEAT):
         cppnInputs: int = 4
         cppnOutputs: int = nrOfLayers - 1
 
-        self.neat = NEAT(numberOfGenomes, cppnInputs, cppnOutputs, populationConfiguration)
+        self.neat = NEAT(population_configuration, mutation_rates)
 
         # Substrate
-        hiddenLayersWidth: int = numOfInputs
+        hiddenLayersWidth: int = population_configuration.n_inputs
 
         self.substrateNeurons: List[NeuronGene] = []
         for y in self.layers:
                 
             if y == -1.0:
-                for x in np.linspace(-1.0, 1.0, num=numOfInputs):
+                for x in np.linspace(-1.0, 1.0, num=population_configuration.n_inputs):
                     self.substrateNeurons.append(NeuronGene(NeuronType.INPUT, -1, y, x))        
 
             elif y == 1.0:
-                for x in np.linspace(-1.0, 1.0, num=numOfOutputs):
+                for x in np.linspace(-1.0, 1.0, num=population_configuration.n_outputs):
                     self.substrateNeurons.append(NeuronGene(NeuronType.OUTPUT, -1, y, x))
             
             else:
@@ -45,12 +44,12 @@ class HyperNEAT(NEAT):
     # def updateCandidate(self, candidate, fitness, features) -> bool:
     #     return self.neat.population.updateArchive(candidate, fitness, features)
 
-    def epoch(self, fitness: List[float], features: Optional[List[float]] = None) -> List[Phenotype]:
-        self.neat.population.updateArchive(fitness, features)
+    def epoch(self, update_data: PopulationUpdate) -> List[Phenotype]:
+        self.neat.population.updatePopulation(update_data)
 
-        cppn = self.population.reproduce()
+        cppns = self.neat.population.reproduce()
 
-        return self.createSubstrate(cppn)
+        return [self.createSubstrate(c) for c in cppns]
 
 
     def createSubstrate(self, cppn):

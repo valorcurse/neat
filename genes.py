@@ -23,9 +23,16 @@ import matplotlib.patches as patches
 
 from prettytable import PrettyTable
 
-from neat.phenotypes import Phenotype, SLink, SNeuron, NeuronType
+import neat.phenotypes
 from neat.innovations import Innovations, Innovation
 from neat.utils import find, fastCopy
+
+
+class NeuronType(Enum):
+    INPUT = 0
+    HIDDEN = 1
+    BIAS = 2
+    OUTPUT = 3
 
 class Species:
     pass
@@ -522,7 +529,8 @@ class Genome:
         self.links.sort()
 
 
-    def createPhenotype(self) -> Phenotype:
+    def createPhenotype(self) -> neat.phenotypes.Phenotype:
+        from neat.phenotypes import SLink, SNeuron
         phenotypeNeurons: List[SNeuron] = []
 
         nodesVisited = []
@@ -552,5 +560,5 @@ class Genome:
                 node.linksIn.append(phenoLink)
 
                     
-        return Phenotype(phenotypeNeurons, self.ID)
+        return neat.phenotypes.Phenotype(phenotypeNeurons, self.ID)
 

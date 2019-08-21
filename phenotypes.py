@@ -12,20 +12,12 @@ from scipy import special
 
 import numpy as np
 
-# from neat.genes import NeuronGene
-import neat.genes as genes
-
-class NeuronType(Enum):
-    INPUT = 0
-    HIDDEN = 1
-    BIAS = 2
-    OUTPUT = 3
-    LINK = 4
-
+from neat.genes import NeuronGene, NeuronType
+# import neat.genes as genes
 
 class SNeuron:
     
-    def __init__(self, neuronGene: genes.NeuronGene) -> None:
+    def __init__(self, neuronGene: NeuronGene) -> None:
         self.linksIn: List[SLink] = []
 
         self.activation = neuronGene.activation

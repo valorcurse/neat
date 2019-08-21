@@ -3,33 +3,41 @@ from typing import List, Dict, Optional, Tuple
 import random
 import pickle
 
-from neat.neat import MutationRates
 from neat.innovations import Innovations
-from neat.genes import Genome, NeuronType, LinkGene, NeuronGene
+from neat.genes import Genome, LinkGene, NeuronGene, MutationRates
+import neat.phenotypes as phenos
 
-from utils import fastCopy
+from neat.utils import fastCopy
 
-class PopulationConfiguration:
+class ParameterDict:
 	
-	def __init__(self):
-		pass
+    def __init__(self):
+        self._data = {}
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __getattr__(self, attr):
+        return self._data.get(attr)
+
+class PopulationConfiguration(ParameterDict):
+    pass
+
+class PopulationUpdate(ParameterDict):
+    pass
 
 class Population:
 
-    def __init__(self, innovations: Innovations, mutationRates: MutationRates):
+    def __init__(self, configuration: PopulationConfiguration, innovations: Innovations, mutationRates: MutationRates):
         self.genomes: List[Genome] = []
-        
-        self.species: List[Species] = []
-        self.speciesNumber: int = 0
 
         self.innovations = innovations
         self.mutationRates = mutationRates
 
         self.currentGenomeID: int = 0
 
-        self.averageInterspeciesDistance: float = 0.0
-        self.numOfInputs = 0
-        self.numOfOutputs = 0
+        self.numOfInputs = configuration.n_inputs
+        self.numOfOutputs = configuration.n_outputs
 
     # def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], numOfInputs: int, numOfOutputs: int, parents=[]):
     	
@@ -40,7 +48,7 @@ class Population:
     #         genome = self.newGenome(neurons, links)
     #         genome.parents = [genome]
 
-    def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
+    def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):
     	
     	genome = Genome(self.currentGenomeID, self.numOfInputs, self.numOfOutputs, self.innovations, neurons, links, parents)
     	self.genomes.append(genome)
@@ -48,7 +56,7 @@ class Population:
 
     	return genome
 
-    def updateFitness(self, fitness: List[float]) -> None:
+    def updatePopulation(self, update_data: PopulationUpdate) -> None:
         pass
 
     def crossover(self, mum: Genome, dad: Genome) -> Genome:
@@ -65,7 +73,7 @@ class Population:
             best = mum if mum.fitness > dad.fitness else dad
 
         # Copy input and output neurons
-        babyNeurons = [fastCopy(n) for n in best.neurons if (n.neuronType != NeuronType.HIDDEN)]
+        babyNeurons = [fastCopy(n) for n in best.neurons if (n.neuronType != phenos.NeuronType.HIDDEN)]
 
         combinedIndexes = list(set(
             [l.ID for l in mum.links] + [l.ID for l in dad.links]))

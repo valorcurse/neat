@@ -18,22 +18,22 @@ from prettytable import PrettyTable
 import pickle
 
 # import genes
-from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 from neat.phenotypes import Phenotype
-# from neat.population import PopulationConfiguration
-# from neat.SpeciatedPopulation import SpeciatedPopulation
-from neat.mapelites import MapElites, MapElitesConfiguration
-from neat.innovations import Innovations
+# from neat.innovations import Innovations
+import neat.innovations
+from neat.mapelites import MapElites, MapElitesConfiguration, MapElitesUpdate
+from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
+from neat.population import PopulationUpdate, PopulationConfiguration, Population
+from neat.genes import NeuronType, Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 
 
 class NEAT:
 
-    def __init__(self, numberOfGenomes: int, numOfInputs: int, numOfOutputs: int,
-        populationConfiguration: MapElitesConfiguration, mutationRates: MutationRates=MutationRates()) -> None:
+    def __init__(self, population_configuration: PopulationConfiguration, mutation_rates: MutationRates=MutationRates()) -> None:
 
-        self.innovations = Innovations()
+        self.innovations = neat.innovations.Innovations()
 
-        self.mutationRates: MutationRates = mutationRates
+        self.mutation_rates: MutationRates = mutation_rates
         self.phenotypes: List[Phenotype] = []
 
 
@@ -43,15 +43,18 @@ class NEAT:
         self.milestone: float = 0.01
 
 
+        # If using MapElites
+        if isinstance(population_configuration, MapElitesConfiguration):
+            self.population: Population = MapElites(population_configuration, self.innovations, mutation_rates)
 
-        links: List[LinkGene] = []
+        # If using regular speciated population
+        elif isinstance(population_configuration, SpeciesConfiguration):
+            self.population = SpeciatedPopulation(population_configuration, self.innovations, mutation_rates)
 
-        # self.population = SpeciatedPopulation(numberOfGenomes, mutationRates)
-        self.population = MapElites(numberOfGenomes, numOfInputs, numOfOutputs, self.innovations, mutationRates, populationConfiguration)
-
-    def epoch(self, fitness: List[float], features: Optional[List[float]] = None) -> List[Phenotype]:
+    # fitness: List[float], features: Optional[List[float]] = None
+    def epoch(self, update: PopulationUpdate) -> List[Phenotype]:
         
-        self.population.updateFitness(fitness)
+        self.population.updatePopulation(update)
 
         genomes = self.population.reproduce()
         

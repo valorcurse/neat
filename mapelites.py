@@ -1,13 +1,13 @@
 from typing import List, Dict, Optional, Tuple, Text
 
-from neat.population import Population, PopulationConfiguration
-from neat.neat import MutationRates
-from neat.genes import Genome, NeuronGene, LinkGene, Phase
 from neat.innovations import Innovations
+from neat.genes import Genome, NeuronGene, LinkGene, Phase, MutationRates
+from neat.population import Population, PopulationConfiguration, PopulationUpdate
+
 
 import random
 import numpy as np
-import pickle
+from icontract import invariant, require, ensure
 
 class Feature:
 
@@ -17,25 +17,40 @@ class Feature:
 		self.max = maximum
 
 class MapElitesConfiguration(PopulationConfiguration):
-	def __init__(self, mapResolution: int, features: List[Feature]):
-		self.mapResolution = mapResolution
-		self.features = features
+	def __init__(self, mapResolution: int, features: List[Feature], n_inputs: int, n_outputs: int):
+		self.data = {
+			"mapResolution": mapResolution,
+			"features": features,
+			"n_inputs": n_inputs,
+			"n_outputs": n_outputs
+		}
+
+		
+
+class MapElitesUpdate(PopulationUpdate):
+	def __init__(self, fitness: List[float], features: List[List[float]]):
+		self.data = {
+			"fitness": fitness,
+			"features": features
+		}
 
 
 class MapElites(Population):
 
-	def __init__(self, inputs: int, outputs: int, innovations: Innovations,
-		mutationRates: MutationRates, configuration: MapElitesConfiguration):
+	@require(lambda configuration: isinstance(configuration, MapElitesConfiguration))
+	def __init__(self, 
+			configuration: PopulationConfiguration, innovations: Innovations, mutationRates: MutationRates
+		):
 		
-		super().__init__(innovations, mutationRates)
+		super().__init__(configuration, innovations, mutationRates)
 
 		self.configuration = configuration
 		self.innovations = innovations
 
-		self.inputs = inputs
-		self.outputs = outputs
+		self.inputs = self.configuration.inputs
+		self.outputs = self.configuration.outputs
 
-		self.archive = np.full([configuration.mapResolution]*len(configuration.features), None, dtype=Genome)
+		self.archive = np.full([configuration.mapResolution*len(configuration.features)], None, dtype=Genome)
 		self.performances = np.zeros([configuration.mapResolution]*len(configuration.features))
 		self.archivedGenomes: List[Genome] = []
 
@@ -79,8 +94,10 @@ class MapElites(Population):
 
 		return self.genomes
 
-	def updateFitness(self, fitness: List[float]) -> None:
-		pass
+	@require(lambda data: isinstance(data, MapElitesUpdate))
+	def updatePopulation(self, update: PopulationUpdate) -> None:
+		self.updateArchive(update.fitness, update.features)
+		
 
 	def updateArchive(self, fitness: List[float], features) -> None:
 

@@ -1,25 +1,24 @@
 from typing import List, Optional, Tuple
 
-from neat.genes import Genome
+import neat.genes as genes
 from neat.utils import fastCopy
-from neat.neat import MutationRates
 from neat.innovations import Innovations
-from neat.population import Population, PopulationConfiguration
+from neat.population import Population, PopulationConfiguration, PopulationUpdate
 
 import math
 import random
+from icontract import invariant, require, ensure
 
-from neat.genes import Phase
 
 class Species:
     numGensAllowNoImprovement = 20
 
-    def __init__(self, speciesID: int, leader: Genome):
+    def __init__(self, speciesID: int, leader: genes.Genome):
         self.ID: int = speciesID
 
-        self.members: List[Genome] = []
+        self.members: List[genes.Genome] = []
         self.addMember(leader)
-        self.leader: Genome = leader
+        self.leader: genes.Genome = leader
 
         self.age: int = 0
         self.numToSpawn: int = 0
@@ -40,18 +39,18 @@ class Species:
     def __contains__(self, key: int) -> bool:
         return key in [m.ID for m in self.members]
 
-    def isMember(self, genome: Genome) -> bool:
+    def isMember(self, genome: genes.Genome) -> bool:
         return (genome.ID in [m.ID for m in self.members])
 
-    def addMember(self, genome: Genome) -> None:
+    def addMember(self, genome: genes.Genome) -> None:
         self.members.append(genome)
         genome.species = self
 
-    def best(self) -> Genome:
+    def best(self) -> genes.Genome:
         return max(self.members)
 
 
-    def spawn(self) -> Genome:
+    def spawn(self) -> genes.Genome:
         return random.choice(self.members)
 
     def adjustFitnesses(self) -> None:
@@ -87,18 +86,37 @@ class Species:
             self.stagnant = True
 
 class SpeciesConfiguration(PopulationConfiguration):
-    def __init__(self, population_size: int):
-        self.population_size = population_size
+    def __init__(self, population_size: int, n_inputs: int, n_outputs: int):
+        self._data = {
+            "population_size": population_size,
+            "n_inputs": n_inputs, 
+            "n_outputs": n_outputs
+        }
+
+
+class SpeciesUpdate(PopulationUpdate):
+    def __init__(self, fitness: List[float]):
+        self.data = {
+            "fitness": fitness
+        }
 
 class SpeciatedPopulation(Population):
 
-    def __init__(self, innovations: Innovations, mutationRates: MutationRates, configuration: SpeciesConfiguration):
-        super().__init__(innovations, mutationRates)
+    def __init__(self, configuration: SpeciesConfiguration, innovations: Innovations, mutationRates: genes.MutationRates):
+        super().__init__(configuration, innovations, mutationRates)
 
         self.population_size = configuration.population_size
         self.generation: int = 0
+        
         self.species: List[Species] = []
-    
+        self.speciesNumber: int = 0
+        self.averageInterspeciesDistance: float = 0.0
+
+        self.numOfInputs = configuration.n_inputs
+        self.numOfOutputs = configuration.n_outputs
+
+        for i in range(self.population_size):
+            self.newGenome()
 
     # def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], numOfInputs: int, numOfOutputs: int, parents=[]):
         
@@ -109,12 +127,14 @@ class SpeciatedPopulation(Population):
     #         genome = self.newGenome(neurons, links)
     #         genome.parents = [genome]
 
-    def updateFitness(self, fitness: List[float]) -> None:
-        pass
+    @require(lambda update: isinstance(update, SpeciesUpdate))
+    def updatePopulation(self, update: PopulationUpdate) -> None:
+        # Set fitness score to their respesctive genome
+        for index, genome in enumerate(self.genomes):
+            genome.fitness = update.fitness[index]
 
     def calculateSpawnAmount(self) -> None:
         # Remove stagnant species
-        # if self.phase == Phase.COMPLEXIFYING:
         for s in self.species:
             s.becomeOlder(len(self.species) == 1)
 
@@ -222,7 +242,7 @@ class SpeciatedPopulation(Population):
             s.members = s.members[:cutoff]
 
             for i in range(s.numToSpawn):
-                baby: Genome = None
+                baby: genes.Genome = None
 
                 if (random.random() > self.mutationRates.crossoverRate):
                     member = random.choice(s.members)
@@ -243,11 +263,14 @@ class SpeciatedPopulation(Population):
 
         self.genomes = newPop
 
-    def reproduce(self) -> List[Genome]:
+    def reproduce(self) -> List[genes.Genome]:
         self.generation += 1
 
         self.calculateSpawnAmount()
         self.newGeneration()
+
+        print("Gumber of genomes: %d"%len(self.genomes))
+
         self.speciate()
 
         return self.genomes
