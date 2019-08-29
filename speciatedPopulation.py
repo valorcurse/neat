@@ -156,7 +156,6 @@ class SpeciatedPopulation(Population):
             portionOfFitness: float = 1.0 if allFitnesses == 0.0 and sumOfFitnesses == 0.0 else sumOfFitnesses/allFitnesses
             s.numToSpawn = int(self.population_size * portionOfFitness)
 
-
     def speciate(self) -> None:
 
         # Find best leader for species from the new population
@@ -269,6 +268,9 @@ class SpeciatedPopulation(Population):
         self.genomes = newPop
 
     def reproduce(self) -> List[genes.Genome]:
+        if len(self.species) == 0:
+            return self.genomes
+            
         self.generation += 1
 
         self.calculateSpawnAmount()

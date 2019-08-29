@@ -18,36 +18,8 @@ class ParameterDict:
     def __getattr__(self, attr):
         return self._data[attr]
 
-
-# class ParameterDict(dict):
-	
-#     def __init__(self):
-#         pass
-#         # self._data = {}
-
-
-#     def __getattr__(self, attr):
-#         return self.get(attr)
-
-    # def __getattr__(self, attr):
-    #     return object.__getattribute__(self, "_data")[attr]
-    #     return self._data[attr]
-
-# class ParameterDict(Mapping):
-#     def __init__(self, *args, **kw):
-#         self._storage = dict(*args, **kw)
-    
-#     def __getitem__(self, key):
-#         return self._storage[key]
-
-#     def __getattr__(self, attr):
-#         return self._storage[attr]
-
-#     def __iter__(self):
-#         return iter(self._storage)    # ``ghost`` is invisible
-    
-#     def __len__(self):
-#         return len(self._storage)
+    # def __setattr__(self, name, value):
+    #     self._data.__dict__[name] = value
 
 class PopulationConfiguration(ParameterDict):
     pass

@@ -17,10 +17,8 @@ from prettytable import PrettyTable
 
 import pickle
 
-# import genes
-from neat.phenotypes import Phenotype
-# from neat.innovations import Innovations
 import neat.innovations
+from neat.phenotypes import Phenotype
 from neat.types import NeuronType
 from neat.mapelites import MapElites, MapElitesConfiguration, MapElitesUpdate
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
@@ -31,6 +29,7 @@ class NEAT:
 
     def __init__(self, population_configuration: PopulationConfiguration, mutation_rates: MutationRates=MutationRates()) -> None:
 
+        self.population_configuration = population_configuration
         self.innovations = neat.innovations.Innovations()
 
         self.mutation_rates: MutationRates = mutation_rates
@@ -44,11 +43,11 @@ class NEAT:
 
 
         # If using MapElites
-        if isinstance(population_configuration, MapElitesConfiguration):
+        if isinstance(self.population_configuration, MapElitesConfiguration):
             self.population: Population = MapElites(population_configuration, self.innovations, mutation_rates)
 
         # If using regular speciated population
-        elif isinstance(population_configuration, SpeciesConfiguration):
+        elif isinstance(self.population_configuration, SpeciesConfiguration):
             self.population = SpeciatedPopulation(population_configuration, self.innovations, mutation_rates)
 
     # fitness: List[float], features: Optional[List[float]] = None
