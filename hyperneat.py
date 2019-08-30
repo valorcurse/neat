@@ -4,7 +4,7 @@ import numpy as np
 from copy import deepcopy
 
 from neat.neat import NEAT
-from neat.utils import fastCopy
+from neat.utils import fastCopy, cartesian
 from neat.types import NeuronType
 from neat.phenotypes import Phenotype
 from neat.population import PopulationUpdate, PopulationConfiguration
@@ -69,44 +69,21 @@ class HyperNEAT(NEAT):
         substrates = []
         for i, c in enumerate(cppns):
             # print(i)
-            t1 = timer()
+            # t1 = timer()
             substrates.append(self.createSubstrate(c).createPhenotype())
-            t2 = timer()
-            print(t2 - t1)
+            print("\r%d/%d"%(i, len(cppns)), end='')
+            # t2 = timer()
+            # print("time:", t2 - t1)
 
 
         return substrates
 
 
-    @staticmethod
     # @njit(float32[:, :](float32[:, :]))
     # @jit(int32(float32[:]))
-    def calculateLinks(layers):
-        # product = np.zeros(layers.shape)
-        # print("product: ")
-        # print(layers[0].shape)
-    
-        for i in range(layers.shape[0] - 1):
-            layer = layers[i]
-            
-            for x, n in np.ndenumerate(layer):
-
-                print(layer.shape)
-
-                for j in range(i, layers.shape[0]):
-                    nextLayer = layers[j]
-
-                    for y, n2 in np.ndenumerate(nextLayer):
-                        # pass
-                        print(n, n2)
-                        # print(product[x, y])
-                        # product[i, j] = [n[0], n[1], n2[0], n2[1]]
-
-                        # np.append([n[0], n[1], n2[0], n2[1]], product)
-                        # product.append(np.multiply(n, nextLayer))
-                        # product.append([n[0], n[1], n2[0], n2[1]])
-
-        return 0
+    @staticmethod
+    def calculateLinks(x, y):
+        return cartesian(x, y)
 
     def createSubstrate(self, cppn):
         cppnPheno = cppn.createPhenotype()
@@ -116,33 +93,37 @@ class HyperNEAT(NEAT):
 
 
         substrateGenome: Genome = Genome(cppn.ID, nrOfInputs, nrOfOutputs, neurons=fastCopy(self.substrateNeurons))
-        
+
         layers = [list(g) for k, g in groupby(substrateGenome.neurons, lambda n: n.y)]
-        
+
+        # print(layers)
         coordinates = []
         for l in layers:
             singleLayer = np.array([n for n in l])
-            # print("singleLayer", singleLayer.shape)
             coordinates.append(singleLayer)
-            # print(np.array(l).shape)
         coordinates = np.array(coordinates)
-        # print("coordinates", coordinates.shape)
+
+
         
         links = []
         for i in range(coordinates.shape[0] - 1):
-            layer = coordinates[i]
-            
+            leftNeuronLayer = coordinates[i]
+
+            leftLayerData = np.array([(n.x, n.y) for n in leftNeuronLayer])
+
             for j in range(i+1, coordinates.shape[0]):
-                nextLayer = coordinates[j]
+                rightNeuronLayer = coordinates[j]
+
+                rightLayerData = np.array([(n.x, n.y) for n in rightNeuronLayer])
                 
-                for p in [x for x in product(layer, nextLayer)]:
-                    coordsInput = [p[0].x, p[0].y, p[1].x, p[1].y]
-                    # print(coordsInput)
-                    outputs = cppnPheno.update(coordsInput)
-                    # print(outputs)
+                positions = self.calculateLinks(rightLayerData, leftLayerData)
+
+                for neuron in zip(positions, leftNeuronLayer, rightNeuronLayer):
+                    # print(neuron)
+                    outputs = cppnPheno.update(neuron[0])
                     output = outputs[0]
                     
-                    links.append(LinkGene(p[0], p[1], -1, output))
+                    links.append(LinkGene(neuron[1], neuron[2], -1, output))
 
         # print(np.array(products))
  
