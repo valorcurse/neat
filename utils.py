@@ -10,5 +10,9 @@ def find(f, seq):
 def fastCopy(object):
     return pickle.loads(pickle.dumps(object, -1))
 
-def cartesian(x, y, out=None):
-    return np.array(np.meshgrid(x, y)).T.reshape(-1, 4)
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]

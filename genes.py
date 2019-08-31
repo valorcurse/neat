@@ -212,11 +212,11 @@ class Genome:
         weightDifferences = []
 
         combinedIndexes = list(set(
-            [l.innovationID for l in self.links] + [l.innovationID for l in other.links]))
+            [l.ID for l in self.links] + [l.ID for l in other.links]))
         combinedIndexes.sort()
         
-        selfLinksDict = {l.innovationID: l for l in self.links}
-        otherLinksDict = {l.innovationID: l for l in other.links}
+        selfLinksDict = {l.ID: l for l in self.links}
+        otherLinksDict = {l.ID: l for l in other.links}
 
         for i in combinedIndexes:
             selfLink = selfLinksDict.get(i)
@@ -253,7 +253,7 @@ class Genome:
             otherNeuron = otherNeuronDict.get(i)
 
 
-                # otherNeuron.innovationID if otherNeuron else "None"))
+                # otherNeuron.ID if otherNeuron else "None"))
 
             if (selfNeuron is None or otherNeuron is None):
                 disjointedNeurons += 1.0
@@ -351,9 +351,9 @@ class Genome:
     #     fromID = fromNeuron.ID if fromNeuron else None
     #     toID = toNeuron.ID if toNeuron else None
 
-    #     innovationID = self.createNewNeuronInnovation(fromID, toID, neuronID)
+    #     ID = self.createNewNeuronInnovation(fromID, toID, neuronID)
 
-    #     return NeuronGene(neuronType, neuronID, innovationID, y)
+    #     return NeuronGene(neuronType, neuronID, ID, y)
 
 
     # fromNeuron and toNeuron can only be None if the neuronType is NeuronType.INPUT or NeuronType.OUTPUT
@@ -373,8 +373,8 @@ class Genome:
 
 
         notHidden = [n for n in self.neurons if n.neuronType != NeuronType.HIDDEN]
-        innovationID = self.innovations.createNewNeuronInnovation(neuronType, fromID, toID)
-        newNeuron = NeuronGene(neuronType, innovationID, y)
+        ID = self.innovations.createNewNeuronInnovation(neuronType, fromID, toID)
+        newNeuron = NeuronGene(neuronType, ID, y)
 
         # newNeuron = innovations.createNewNeuron(y, neuronType, fromNeuron, toNeuron)
 
@@ -535,12 +535,12 @@ class Genome:
             
 
         while not queue.empty():
-            node: SNeuron = queue.get()
+            neuron: SNeuron = queue.get()
 
-            phenotypeNeurons.append(node)
-            nodesVisited.append(node.ID)
+            phenotypeNeurons.append(neuron)
+            nodesVisited.append(neuron.ID)
 
-            for link in [l for l in self.links if node.ID == l.toNeuron.ID]:
+            for link in [l for l in self.links if neuron.ID == l.toNeuron.ID]:
                 fromNeuron = None
                 if link.fromNeuron.ID not in nodesVisited:
                     fromNeuron = SNeuron(link.fromNeuron)
@@ -549,10 +549,11 @@ class Genome:
                 else:
                     fromNeuron = find(lambda n: n.ID == link.fromNeuron.ID, phenotypeNeurons)
 
-                phenoLink = SLink(fromNeuron, node, link.weight)
+                phenoLink = SLink(fromNeuron, neuron, link.weight)
 
-                node.linksIn.append(phenoLink)
+                neuron.linksIn.append(phenoLink)
 
+        print("Create phenotype -> neurons: {} | links: {}".format(len(phenotypeNeurons), len([n.linksIn for n in phenotypeNeurons])))
                     
         return neat.phenotypes.Phenotype(phenotypeNeurons, self.ID)
 

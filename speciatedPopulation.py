@@ -122,14 +122,12 @@ class SpeciatedPopulation(Population):
             self.genomes.append(newGenome)
             self.currentGenomeID += 1
 
-    # def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], numOfInputs: int, numOfOutputs: int, parents=[]):
-        
-    #     self.numOfInputs = numOfInputs
-    #     self.numOfOutputs = numOfOutputs
+        # Temp 
+        for g in self.genomes:
+            for _ in range(50):
+                g.mutate(mutationRates)
 
-    #     for i in range(self.population_size):
-    #         genome = self.newGenome(neurons, links)
-    #         genome.parents = [genome]
+        self.speciate()
 
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
@@ -203,15 +201,16 @@ class SpeciatedPopulation(Population):
                 closestSpecies.addMember(genome)
 
             else: # Else create a new species
-                chance: float = random.random()
+                # chance: float = random.random()
 
-                parentSpecies: Optional[Species] = random.choice(genome.parents).species
+                # parentSpecies: Optional[Species] = random.choice(genome.parents).species
 
                 # if (chance >= 0.1) and parentSpecies is not None:
                 #     parentSpecies.addMember(genome)
                 # else:
                 self.speciesNumber += 1
                 self.species.append(Species(self.speciesNumber, genome))
+                print("Creating new species %d"%self.speciesNumber)
 
         # Calculate average interspecies distance
         if len(self.species) > 1:
@@ -268,9 +267,8 @@ class SpeciatedPopulation(Population):
         self.genomes = newPop
 
     def reproduce(self) -> List[genes.Genome]:
-        if len(self.species) == 0:
-            return self.genomes
-            
+        
+        # if len(self.species) > 0:    
         self.generation += 1
 
         self.calculateSpawnAmount()
