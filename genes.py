@@ -12,14 +12,17 @@ from random import randint
 import math
 from math import cos, sin, atan, ceil, floor
 from sklearn.preprocessing import normalize
+from numba import jit, njit, int32, float32, cuda
+
 
 from enum import Enum
 import itertools
-import pickle
+from itertools import groupby
 
 import numpy as np
 from matplotlib import pyplot
 import matplotlib.patches as patches
+import networkx as nx
 
 from prettytable import PrettyTable
 
@@ -38,6 +41,12 @@ class Phase(Enum):
 class SpeciationType(Enum):
     COMPATIBILITY_DISTANCE = 0
     NOVELTY = 1
+
+class FuncsEnum(Enum):
+    tanh = 0
+    sin = 1
+    cos = 2
+
 
 # activations = [
 #     lambda x: 1.0 / (1.0 + math.exp(-x)),   # Sigmoid
@@ -101,30 +110,46 @@ class NeuronGene:
         
         self.activation = self.tanh
 
-        self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
+        # self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
+        self.activations = [self.tanh, self.sin, self.cos]
 
     def __repr__(self):
         return "NeuronGene(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
 
-    def sigmoid(self, x: float) -> float:
-        return 1.0 / (1.0 + math.exp(-x))   # Sigmoid
-    
-    def tanh(self, x: float) -> float:
-        return np.tanh(x)                   # Tanh
-    
-    def relu(self, x: float) -> float:
-        return np.maximum(x, 0)             # ReLu
-    
-    def leakyRelu(self, x: float) -> float:
-        return x if x > 0.0 else x * 0.01   # Leaky ReLu
-    
-    def sin(self, x: float) -> float:
-        return np.sin(x)                    # Sin
-    
-    def cos(self, x: float) -> float:
-        return np.cos(x)                     # Cos
 
-    def gaussian(self, x: float) -> float:
+    @staticmethod
+    @jit
+    def sigmoid(x: float) -> float:
+        return 1.0 / (1.0 + math.exp(-x))   # Sigmoid
+
+    @staticmethod
+    @jit
+    def tanh(x: float) -> float:
+        return math.tanh(x)                   # Tanh
+
+    @staticmethod
+    @jit 
+    def relu(x: float) -> float:
+        return max(x, 0)             # ReLu
+
+    @staticmethod
+    @jit
+    def leakyRelu(x: float) -> float:
+        return x if x > 0.0 else x * 0.01   # Leaky ReLu
+
+    @staticmethod
+    @jit
+    def sin(x: float) -> float:
+        return math.sin(x)                    # Sin
+
+    @staticmethod
+    @jit
+    def cos(x: float) -> float:
+        return math.cos(x)                     # Cos
+
+    @staticmethod
+    @jit
+    def gaussian(x: float) -> float:
         return math.exp((-x)**2)
 
     def __eq__(self, other: Any) -> bool:
@@ -526,34 +551,49 @@ class Genome:
     def createPhenotype(self) -> neat.phenotypes.Phenotype:
         from neat.phenotypes import SLink, SNeuron
         phenotypeNeurons: List[SNeuron] = []
+        phenoGraph = nx.DiGraph()
 
-        nodesVisited = []
         queue: Queue = Queue()
         for neuronGene in [n for n in self.neurons if n.neuronType != NeuronType.HIDDEN]:
             newNeuron = SNeuron(neuronGene)
             queue.put(newNeuron)
             
 
+        linksDict: Dict[int, List[LinkGene]] = {}
+        for key, group in itertools.groupby(self.links, key=lambda x: x.toNeuron.ID):
+            linksDict[key] = list(group)
+
+        nodesVisited: Dict[int, SNeuron] = {}
         while not queue.empty():
             neuron: SNeuron = queue.get()
 
-            phenotypeNeurons.append(neuron)
-            nodesVisited.append(neuron.ID)
+            # phenotypeNeurons.append(neuron)
+            phenoGraph.add_node(neuron.ID, activation=neuron.activation)
 
-            for link in [l for l in self.links if neuron.ID == l.toNeuron.ID]:
+            nodesVisited[neuron.ID] = neuron
+
+            if neuron.ID not in linksDict:
+                continue
+
+            for link in linksDict[neuron.ID]:
                 fromNeuron = None
+                # If we haven't visited this node before, add it to the queue
                 if link.fromNeuron.ID not in nodesVisited:
                     fromNeuron = SNeuron(link.fromNeuron)
                     queue.put(SNeuron(link.fromNeuron))
 
+
                 else:
-                    fromNeuron = find(lambda n: n.ID == link.fromNeuron.ID, phenotypeNeurons)
+                    fromNeuron = nodesVisited[link.fromNeuron.ID]
+                    # fromNeuron = find(lambda n: n.ID == link.fromNeuron.ID, phenotypeNeurons)
 
-                phenoLink = SLink(fromNeuron, neuron, link.weight)
+                phenoGraph.add_edge(fromNeuron.ID, neuron.ID, weight=link.weight)
+                # phenoLink = SLink(fromNeuron, neuron, link.weight)
 
-                neuron.linksIn.append(phenoLink)
+                # neuron.linksIn.append(phenoLink)
 
         print("Create phenotype -> neurons: {} | links: {}".format(len(phenotypeNeurons), len([n.linksIn for n in phenotypeNeurons])))
                     
-        return neat.phenotypes.Phenotype(phenotypeNeurons, self.ID)
+        # return neat.phenotypes.Phenotype(phenotypeNeurons, self.ID)
+        return neat.phenotypes.Phenotype(phenoGraph, self.ID)
 

@@ -12,10 +12,10 @@ from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, Speci
 
 from numba import jit, njit, int32, float32, cuda
 
-from itertools import groupby, product
+from itertools import groupby
 
 from timeit import default_timer as timer
-
+from visualize import Visualize
 
 
 class HyperNEAT(NEAT):
@@ -64,15 +64,9 @@ class HyperNEAT(NEAT):
         cppns = self.neat.population.reproduce()
         substrates = []
         for i, c in enumerate(cppns):
-            # print(i)
-            # t1 = timer()
-            
             substrates.append(self.createSubstrate(c).createPhenotype())
             
             print("\rCreated substrates: %d/%d"%(i, len(cppns)), end='')
-            
-            # t2 = timer()
-            # print("time:", t2 - t1)
 
         print("")
 
@@ -83,11 +77,8 @@ class HyperNEAT(NEAT):
     @njit
     def calculateLinks(X, Y):
         array = np.empty((X.shape[0]*Y.shape[0], 2))
-        # print(array.shape)
         for i, x in enumerate(X):
             for j, y in enumerate(Y):
-                # print(i, j)
-                # print(array[i, :])
                 array[i, :] = (x, y)
 
         return array
@@ -95,6 +86,8 @@ class HyperNEAT(NEAT):
         # return np.array(np.meshgrid(x, y)).T.reshape(-1, 2)
 
     def createSubstrate(self, cppn):
+        t1 = timer()
+            
         cppnPheno = cppn.createPhenotype()
 
         nrOfInputs = self.n_inputs
@@ -124,10 +117,7 @@ class HyperNEAT(NEAT):
 
                 rightLayerData = np.array([n.x for n in rightNeuronLayer])
                 
-            
-            
                 positions = self.calculateLinks(rightLayerData, leftLayerData)
-
 
                 for neuron in zip(positions, np.repeat(leftNeuronLayer, len(rightNeuronLayer)), np.tile(rightNeuronLayer, len(leftNeuronLayer))):
                     cppnInput = [neuron[0][0], leftDepth, neuron[0][1], rightDepth]
@@ -138,6 +128,9 @@ class HyperNEAT(NEAT):
                     # if abs(output) >= 0.5:
                     links.append(LinkGene(neuron[1], neuron[2], len(links), output))
 
+        t2 = timer()
+        print("time:", t2 - t1)
+        
         substrateGenome.links = links
 
         return substrateGenome

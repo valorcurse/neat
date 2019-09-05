@@ -115,7 +115,11 @@ class SpeciatedPopulation(Population):
         self.numOfInputs = configuration.n_inputs
         self.numOfOutputs = configuration.n_outputs
 
+        
         baseGenome = self.newGenome()
+        firstSpecies = Species(self.speciesNumber, baseGenome)
+        self.species.append(firstSpecies)
+        
         for i in range(self.population_size - 1):
             newGenome = fastCopy(baseGenome)
             newGenome.ID = self.currentGenomeID
@@ -127,7 +131,7 @@ class SpeciatedPopulation(Population):
             for _ in range(50):
                 g.mutate(mutationRates)
 
-        self.speciate()
+        # self.speciate()
 
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
