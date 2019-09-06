@@ -10,6 +10,7 @@ from neat.phenotypes import Phenotype
 from neat.population import PopulationUpdate, PopulationConfiguration
 from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 
+import networkx as nx
 from numba import jit, njit, int32, float32, cuda
 
 from itertools import groupby
@@ -64,6 +65,7 @@ class HyperNEAT(NEAT):
         cppns = self.neat.population.reproduce()
         substrates = []
         for i, c in enumerate(cppns):
+            print("epoch:", i)
             substrates.append(self.createSubstrate(c).createPhenotype())
             
             print("\rCreated substrates: %d/%d"%(i, len(cppns)), end='')
@@ -73,29 +75,48 @@ class HyperNEAT(NEAT):
         return substrates
 
 
+    # @staticmethod
+    # @njit
+    # def calculateLinks(X, Y):
+    #     array = np.empty((X.shape[0]*Y.shape[0], 2))
+    #     for i, x in enumerate(X):
+    #         for j, y in enumerate(Y):
+    #             array[i, :] = (x, y)
+
+    #     return array
+
     @staticmethod
     @njit
-    def calculateLinks(X, Y):
-        array = np.empty((X.shape[0]*Y.shape[0], 2))
-        for i, x in enumerate(X):
-            for j, y in enumerate(Y):
-                array[i, :] = (x, y)
+    def calculateLinks(X, y1, Y, y2, execution):
+        array = np.empty(X.shape[0])
+        links = np.empty((array.shape[0], 3))
 
-        return array
+        for i, x1 in enumerate(X.T[0]):
+            for j, x2, in enumerate(Y.T[0]):
+                inputs = [x1, y1, x2, y2]
+                value = execution.update(inputs)
+                links[len(links)-1] = [X[i][1], X[j][1], value[0]]
+
+        return links
+
 
         # return np.array(np.meshgrid(x, y)).T.reshape(-1, 2)
 
-    def createSubstrate(self, cppn):
-        t1 = timer()
+    def createSubstrate(self, cppn: Genome) -> Phenotype:
             
         cppnPheno = cppn.createPhenotype()
-
+        print("cppn outputs:", len(cppnPheno.out_nodes))
+        cppn_exec = cppnPheno.execution
+        
+        graph = nx.DiGraph()
+        graph.add_nodes_from([(n.ID,  {"activation": n.activation}) for n in self.substrateNeurons])
         nrOfInputs = self.n_inputs
         nrOfOutputs = self.n_outputs
 
-        substrateGenome: Genome = Genome(cppn.ID, nrOfInputs, nrOfOutputs, neurons=fastCopy(self.substrateNeurons))
+        # substrateGenome: Genome = Genome(cppn.ID, nrOfInputs, nrOfOutputs, neurons=fastCopy(self.substrateNeurons))
 
-        layers = [list(g) for k, g in groupby(substrateGenome.neurons, lambda n: n.y)]
+        # layers = [list(g) for k, g in groupby(substrateGenome.neurons, lambda n: n.y)]
+        layers = [list(g) for k, g in groupby(self.substrateNeurons, lambda n: n.y)]
 
         coordinates = []
         for l in layers:
@@ -103,34 +124,66 @@ class HyperNEAT(NEAT):
             coordinates.append(singleLayer)
         coordinates = np.array(coordinates)
 
-
         links = []
         for i in range(coordinates.shape[0] - 1):
             leftNeuronLayer = coordinates[i]
 
-            leftLayerData = np.array([n.x for n in leftNeuronLayer])
+            X = np.array([(n.x, n.ID) for n in leftNeuronLayer])
             leftDepth = leftNeuronLayer[0].y
+
+
 
             for j in range(i+1, coordinates.shape[0]):
                 rightNeuronLayer = coordinates[j]
+                # print(rightNeuronLayer)
                 rightDepth = rightNeuronLayer[0].y
 
-                rightLayerData = np.array([n.x for n in rightNeuronLayer])
+                Y = np.array([(n.x, n.ID) for n in rightNeuronLayer])
+                # print(X)
+                # print(i, j)
                 
-                positions = self.calculateLinks(rightLayerData, leftLayerData)
+                t1 = timer()
+                links = self.calculateLinks(X, leftDepth, Y, rightDepth, cppn_exec)
+                
+                # for l_i, l in enumerate(leftLayerData):
+                    # left_ID = leftNeuronLayer[l_i].ID
+                    # links = self.calculateLinks(left_ID, l, leftDepth, X, rightDepth, cppn_exec)
+                t2 = timer()
+                print("time:", t2 - t1)
 
-                for neuron in zip(positions, np.repeat(leftNeuronLayer, len(rightNeuronLayer)), np.tile(rightNeuronLayer, len(leftNeuronLayer))):
-                    cppnInput = [neuron[0][0], leftDepth, neuron[0][1], rightDepth]
-                    
-                    outputs = cppnPheno.update(cppnInput)
-                    output = outputs[0]
+                    # print(links)
+                    # print(values.shape)
+                    # for v_i, v in enumerate(values):
+                        # graph.add_edge(leftNeuronLayer[l_i].ID, rightNeuronLayer[v_i].ID, weight=v[0])
+                        # print(leftNeuronLayer[l_i], rightNeuronLayer[v_i], v)
+                        # if abs(v) >= 0.5:
+                            # links.append(LinkGene(leftNeuronLayer[l_i], rightNeuronLayer[v_i], len(links), v))
+                        # links.append((leftNeuronLayer[l_i].ID, rightNeuronLayer[v_i].ID, v[0]))
+            #     # print(rightLayerData)
+            #     for r_i, r in enumerate(rightLayerData):
+            #         print(r)
+            #         # positions = self.calculateLinks(rightLayerData, leftLayerData)
+            #         positions = self.calculateLinks(np.array([r]), leftLayerData)
+            #         # print("positions", positions)
+            #         for neuron in zip(positions, np.repeat(leftNeuronLayer, len(rightNeuronLayer)), np.tile(rightNeuronLayer, len(leftNeuronLayer))):
+            #             # t1 = timer()
+            #             cppnInput = [neuron[0][0], leftDepth, neuron[0][1], rightDepth]
+                        
+            #             outputs = cppnPheno.update(cppnInput)
+            #             output = outputs[0]
 
-                    # if abs(output) >= 0.5:
-                    links.append(LinkGene(neuron[1], neuron[2], len(links), output))
+            #             # t2 = timer()
+            #             # print("time:", t2 - t1)
+            #             # if abs(output) >= 0.5:
+            #             links.append(LinkGene(neuron[1], neuron[2], len(links), output))
 
-        t2 = timer()
-        print("time:", t2 - t1)
-        
-        substrateGenome.links = links
+        graph.add_weighted_edges_from(links)
+        graph.remove_nodes_from(list(nx.isolates(graph)))
 
-        return substrateGenome
+        # substrateGenome.links = links
+
+        # graph.add_weighted_edges_from(links)
+
+        # phenotype = Phenotype(graph, cppn.ID)
+
+        return Phenotype(graph, cppn.ID)

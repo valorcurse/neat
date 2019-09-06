@@ -559,6 +559,7 @@ class Genome:
             queue.put(newNeuron)
             
 
+
         linksDict: Dict[int, List[LinkGene]] = {}
         for key, group in itertools.groupby(self.links, key=lambda x: x.toNeuron.ID):
             linksDict[key] = list(group)
@@ -568,7 +569,7 @@ class Genome:
             neuron: SNeuron = queue.get()
 
             # phenotypeNeurons.append(neuron)
-            phenoGraph.add_node(neuron.ID, activation=neuron.activation)
+            phenoGraph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType)
 
             nodesVisited[neuron.ID] = neuron
 
@@ -585,15 +586,11 @@ class Genome:
 
                 else:
                     fromNeuron = nodesVisited[link.fromNeuron.ID]
-                    # fromNeuron = find(lambda n: n.ID == link.fromNeuron.ID, phenotypeNeurons)
 
                 phenoGraph.add_edge(fromNeuron.ID, neuron.ID, weight=link.weight)
-                # phenoLink = SLink(fromNeuron, neuron, link.weight)
 
-                # neuron.linksIn.append(phenoLink)
+        # print(phenoGraph.nodes.data())
+        # print("outputs: ", len([n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]), len([n for n,d in phenoGraph.out_degree() if d == 0]))
 
-        print("Create phenotype -> neurons: {} | links: {}".format(len(phenotypeNeurons), len([n.linksIn for n in phenotypeNeurons])))
-                    
-        # return neat.phenotypes.Phenotype(phenotypeNeurons, self.ID)
         return neat.phenotypes.Phenotype(phenoGraph, self.ID)
 
