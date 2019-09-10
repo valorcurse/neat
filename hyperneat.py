@@ -11,7 +11,9 @@ from neat.population import PopulationUpdate, PopulationConfiguration
 from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 
 import networkx as nx
-from numba import jit, njit, int32, float32, cuda
+from numba import jit, njit, generated_jit, int64, float64, cuda, jitclass, void
+
+import math
 
 from itertools import groupby
 
@@ -75,29 +77,48 @@ class HyperNEAT(NEAT):
         return substrates
 
 
-    # @staticmethod
+    @staticmethod
     # @njit
-    # def calculateLinks(X, Y):
-    #     array = np.empty((X.shape[0]*Y.shape[0], 2))
-    #     for i, x in enumerate(X):
-    #         for j, y in enumerate(Y):
-    #             array[i, :] = (x, y)
+    def calculateLinks(x, Y):
+        array = np.empty((Y.shape[0], 4))
+        # for i, x in enumerate(X):
+        for i, y in enumerate(Y):
+            coords = np.array([x, y]).flatten()
+            # print(array[i, :], coords)
+            array[i, :] = coords
 
-    #     return array
+        return array
 
     @staticmethod
-    @njit
-    def calculateLinks(X, y1, Y, y2, execution):
-        array = np.empty(X.shape[0])
-        links = np.empty((array.shape[0], 3))
+    # @njit
+    @cuda.jit(void(float64[:], float64, float64[:], float64, int64[:], float64[:]))
+    def calculateLinks2(X, y1, Y, y2, execution, links):
+        # array = np.empty(X.shape[0])
+        # links = np.empty((array.shape[0], 3))
 
-        for i, x1 in enumerate(X.T[0]):
-            for j, x2, in enumerate(Y.T[0]):
-                inputs = [x1, y1, x2, y2]
-                value = execution.update(inputs)
-                links[len(links)-1] = [X[i][1], X[j][1], value[0]]
+        # startX, startY = cuda.grid(1)
+        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-        return links
+
+        x = i%X.shape[0]
+        y = abs(i%2-math.floor(i/Y.shape[0]))
+
+        x1 = X[int(x)]
+        x2 = Y[int(y)]
+
+        inputs = [x1, y1, x2, y2]
+        # value = execution.update(inputs)
+        # gridX = cuda.gridDim.x * cuda.blockDim.x
+        # gridY = cuda.gridDim.y * cuda.blockDim.y
+
+        # for i, x1 in enumerate(X.T[0]):
+            # for j, x2, in enumerate(Y.T[0]):
+                # inputs = [x1, y1, x2, y2]
+
+                # value = execution.update(inputs)
+                # links[len(links)-1] = [X[i][1], X[j][1], value[0]]
+
+        # return links
 
 
         # return np.array(np.meshgrid(x, y)).T.reshape(-1, 2)
@@ -143,7 +164,20 @@ class HyperNEAT(NEAT):
                 # print(i, j)
                 
                 t1 = timer()
-                links = self.calculateLinks(X, leftDepth, Y, rightDepth, cppn_exec)
+                links = np.empty((X.shape[0], 3))
+
+                # print(X, Y)
+                for x in X:
+                    inputs = self.calculateLinks(x, Y)
+                    cppnPheno.execution.update(inputs)
+
+                # totalArraySize = X.size * Y.size
+                # threadsperblock = 32
+                # blockspergrid = (totalArraySize + (threadsperblock - 1)) // threadsperblock
+                # print(totalArraySize, blockspergrid, threadsperblock)
+                # self.calculateLinks[blockspergrid, threadsperblock](X, leftDepth, Y, rightDepth, cppn_exec, links)
+
+                # self.calculateLinks(X, leftDepth, Y, rightDepth, cppn_exec, links)
                 
                 # for l_i, l in enumerate(leftLayerData):
                     # left_ID = leftNeuronLayer[l_i].ID
