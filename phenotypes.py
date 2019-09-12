@@ -106,17 +106,19 @@ class SubstrateCUDA(object):
 
             array = np.empty((self.batch_size, 4))
             mem = np.empty((self.batch_size, num_of_nodes))
-
             cuda_mem = cuda.to_device(mem)
+            results = np.empty((self.batch_size, self.num_out_nodes))
+            cuda_results = cuda.to_device(results)
 
-            calcResults2[blockspergrid, threadsperblock](X, Y, cuda_adj, cuda_acts, cuda_mem, start_index)
+            calcResults2[blockspergrid, threadsperblock](X, Y, cuda_adj, cuda_acts, cuda_mem, start_index, cuda_results)
 
-            mem = cuda_mem.copy_to_host()
-            outputs = mem.T[-self.num_out_nodes:].T
+            # mem = cuda_mem.copy_to_host()
+            results = cuda_results.copy_to_host()
+            # outputs = mem.T[-self.num_out_nodes:].T
 
             t2 = timer()
             print("Batch: {} | Time: {}".format(batch_i, t2-t1))
-            print(outputs)
+            print(results)
 
         return outputs
 
@@ -188,35 +190,14 @@ def calcResults(adj, acts, mem):
     feedForward(adj, acts, mem[i])
 
 @cuda.jit
-def calcResults2(X, Y, adj, acts, mem, start_index):
+def calcResults2(X, Y, adj, acts, mem, start_index, results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-
-    # for batch_i in range(num_of_batches):
-    # print(i, start_index, mem.shape, mem[i].shape)
-    # print(mem[i].shape)
     calculateLinks(X, Y, start_index, mem[i])
-    # print(mem[i])
-    # if i >= mem.shape[0]:
-    #     return
-
-    # x_size = X.shape[0]
-    # y_size = Y.shape[0]
-
-    # print(x_size, y_size)
-
-    # x = int(i%x_size)
-    # y = int(abs(i%y_size-math.floor(i/x_size)))
-    # num_of_inputs = X.shape[1] + Y.shape[1]
-    
-    # print(i, X[x], Y[y])
-
-    # mem[i][:2] = X[x]
-    # mem[i][2:4] = Y[y]
-
-    # print(mem)
-
     feedForward(adj, acts, mem[i])
+
+    results[i][0] = mem[i][-1]
+    results[i][1] = mem[i][-2]
 
 
 
