@@ -6,7 +6,7 @@ from copy import deepcopy
 from neat.neat import NEAT
 from neat.utils import fastCopy
 from neat.types import NeuronType
-from neat.phenotypes import Phenotype
+from neat.phenotypes import Phenotype, SubstrateCUDA
 from neat.population import PopulationUpdate, PopulationConfiguration
 from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
 
@@ -78,56 +78,33 @@ class HyperNEAT(NEAT):
 
 
     @staticmethod
-    # @njit
-    def calculateLinks(x, Y):
-        array = np.empty((Y.shape[0], 4))
-        # for i, x in enumerate(X):
-        for i, y in enumerate(Y):
-            coords = np.array([x, y]).flatten()
-            # print(array[i, :], coords)
-            array[i, :] = coords
+    # @cuda.jit
+    @njit
+    def calculateLinks(X, Y, start_index, array):
+        x_size = X.shape[0]
+        y_size = Y.shape[0]
+        array_size = array.shape[0]
+        range_end = start_index + array_size
 
-        return array
+        for i in range(array_size):
+            if range_end >= x_size*y_size:
+                break
 
-    @staticmethod
-    # @njit
-    @cuda.jit(void(float64[:], float64, float64[:], float64, int64[:], float64[:]))
-    def calculateLinks2(X, y1, Y, y2, execution, links):
-        # array = np.empty(X.shape[0])
-        # links = np.empty((array.shape[0], 3))
+            batch_i = start_index+i
+            x = int(batch_i%x_size)
+            y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
+            
+            array[i, 0] = X[x][0]
+            array[i, 1] = X[x][1]
+            array[i, 2] = Y[y][0]
+            array[i, 3] = Y[y][1]
 
-        # startX, startY = cuda.grid(1)
-        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-
-
-        x = i%X.shape[0]
-        y = abs(i%2-math.floor(i/Y.shape[0]))
-
-        x1 = X[int(x)]
-        x2 = Y[int(y)]
-
-        inputs = [x1, y1, x2, y2]
-        # value = execution.update(inputs)
-        # gridX = cuda.gridDim.x * cuda.blockDim.x
-        # gridY = cuda.gridDim.y * cuda.blockDim.y
-
-        # for i, x1 in enumerate(X.T[0]):
-            # for j, x2, in enumerate(Y.T[0]):
-                # inputs = [x1, y1, x2, y2]
-
-                # value = execution.update(inputs)
-                # links[len(links)-1] = [X[i][1], X[j][1], value[0]]
-
-        # return links
-
-
-        # return np.array(np.meshgrid(x, y)).T.reshape(-1, 2)
 
     def createSubstrate(self, cppn: Genome) -> Phenotype:
             
         cppnPheno = cppn.createPhenotype()
         print("cppn outputs:", len(cppnPheno.out_nodes))
-        cppn_exec = cppnPheno.execution
+        # cppn_exec = cppnPheno.execution
         
         graph = nx.DiGraph()
         graph.add_nodes_from([(n.ID,  {"activation": n.activation}) for n in self.substrateNeurons])
@@ -146,6 +123,7 @@ class HyperNEAT(NEAT):
         coordinates = np.array(coordinates)
 
         links = []
+        # batch_size = 100000000
         for i in range(coordinates.shape[0] - 1):
             leftNeuronLayer = coordinates[i]
 
@@ -156,68 +134,16 @@ class HyperNEAT(NEAT):
 
             for j in range(i+1, coordinates.shape[0]):
                 rightNeuronLayer = coordinates[j]
-                # print(rightNeuronLayer)
                 rightDepth = rightNeuronLayer[0].y
 
                 Y = np.array([(n.x, n.ID) for n in rightNeuronLayer])
-                # print(X)
-                # print(i, j)
-                
-                t1 = timer()
+
                 links = np.empty((X.shape[0], 3))
 
-                # print(X, Y)
-                for x in X:
-                    inputs = self.calculateLinks(x, Y)
-                    cppnPheno.execution.update(inputs)
-
-                # totalArraySize = X.size * Y.size
-                # threadsperblock = 32
-                # blockspergrid = (totalArraySize + (threadsperblock - 1)) // threadsperblock
-                # print(totalArraySize, blockspergrid, threadsperblock)
-                # self.calculateLinks[blockspergrid, threadsperblock](X, leftDepth, Y, rightDepth, cppn_exec, links)
-
-                # self.calculateLinks(X, leftDepth, Y, rightDepth, cppn_exec, links)
-                
-                # for l_i, l in enumerate(leftLayerData):
-                    # left_ID = leftNeuronLayer[l_i].ID
-                    # links = self.calculateLinks(left_ID, l, leftDepth, X, rightDepth, cppn_exec)
-                t2 = timer()
-                print("time:", t2 - t1)
-
-                    # print(links)
-                    # print(values.shape)
-                    # for v_i, v in enumerate(values):
-                        # graph.add_edge(leftNeuronLayer[l_i].ID, rightNeuronLayer[v_i].ID, weight=v[0])
-                        # print(leftNeuronLayer[l_i], rightNeuronLayer[v_i], v)
-                        # if abs(v) >= 0.5:
-                            # links.append(LinkGene(leftNeuronLayer[l_i], rightNeuronLayer[v_i], len(links), v))
-                        # links.append((leftNeuronLayer[l_i].ID, rightNeuronLayer[v_i].ID, v[0]))
-            #     # print(rightLayerData)
-            #     for r_i, r in enumerate(rightLayerData):
-            #         print(r)
-            #         # positions = self.calculateLinks(rightLayerData, leftLayerData)
-            #         positions = self.calculateLinks(np.array([r]), leftLayerData)
-            #         # print("positions", positions)
-            #         for neuron in zip(positions, np.repeat(leftNeuronLayer, len(rightNeuronLayer)), np.tile(rightNeuronLayer, len(leftNeuronLayer))):
-            #             # t1 = timer()
-            #             cppnInput = [neuron[0][0], leftDepth, neuron[0][1], rightDepth]
-                        
-            #             outputs = cppnPheno.update(cppnInput)
-            #             output = outputs[0]
-
-            #             # t2 = timer()
-            #             # print("time:", t2 - t1)
-            #             # if abs(output) >= 0.5:
-            #             links.append(LinkGene(neuron[1], neuron[2], len(links), output))
+                substrateCUDA = SubstrateCUDA(cppnPheno)
+                outputs = substrateCUDA.update(X, Y)
 
         graph.add_weighted_edges_from(links)
         graph.remove_nodes_from(list(nx.isolates(graph)))
-
-        # substrateGenome.links = links
-
-        # graph.add_weighted_edges_from(links)
-
-        # phenotype = Phenotype(graph, cppn.ID)
 
         return Phenotype(graph, cppn.ID)

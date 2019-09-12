@@ -54,47 +54,108 @@ class SLink:
 
 # spec = [('adjacency_matrix', float64[:, :]), ('activations', int64[:]), ('num_of_nodes', int64), ('in_nodes', int64), ('out_nodes', int64)]
 # @jitclass(spec)
-class Execution(object):
+class SubstrateCUDA(object):
 
-    def __init__(self, adjacency_matrix, activations, num_of_nodes, in_nodes, out_nodes):
-        self.adjacency_matrix = adjacency_matrix
-        self.activations = activations
-        self.num_of_nodes = num_of_nodes
-        self.in_nodes = in_nodes
-        self.out_nodes = out_nodes
+    def __init__(self, phenotype: Phenotype):
+        self.phenotype = phenotype
+        self.adjacency_matrix = self.phenotype.adjacency_matrix
+        self.activations = self.phenotype.activations
+        self.num_of_nodes = len(self.phenotype.graph.nodes)
+        self.num_in_nodes = len(self.phenotype.in_nodes)
+        self.num_out_nodes = len(self.phenotype.out_nodes)
 
-    # @vectorize
-    # def update(self, inputs):
-    def update(self, X):
-        Y = np.empty(X.shape)
-        num_of_nodes = self.adjacency_matrix.shape[0]
-        mem = np.zeros((X.shape[0], num_of_nodes))
-        mem[:, :X.shape[1]] = X
-        
-        print(mem)
+        self.batch_size = 50 * 10**6
+    # def update(self, X):
+    #     # Y = np.empty(X.shape)
+    #     num_of_nodes = self.adjacency_matrix.shape[0]
+    #     mem = np.zeros((X.shape[0], num_of_nodes))
+    #     mem[:, :X.shape[1]] = X
+    #     # print(mem)
 
+    #     cuda_adj = cuda.to_device(self.adjacency_matrix)
+    #     cuda_acts = cuda.to_device(self.activations)
+    #     cuda_mem = cuda.to_device(mem)
+
+    #     threadsperblock = 32
+    #     blockspergrid = (X.shape[0] + (threadsperblock - 1)) // threadsperblock
+
+    #     calcResults[blockspergrid, threadsperblock](cuda_adj, cuda_acts, cuda_mem)
+
+    #     mem = cuda_mem.copy_to_host()
+    #     outputs = mem.T[-self.num_out_nodes:].T
+
+    #     return outputs
+
+
+    def update(self, X, Y):
         cuda_adj = cuda.to_device(self.adjacency_matrix)
         cuda_acts = cuda.to_device(self.activations)
-        cuda_mem = cuda.to_device(mem)
 
-        print(self.adjacency_matrix)
-        
         threadsperblock = 32
-        blockspergrid = (X.shape[0] + (threadsperblock - 1)) // threadsperblock
+        blockspergrid = (self.batch_size + (threadsperblock - 1)) // threadsperblock
 
-        print("cuda", blockspergrid, threadsperblock)
+        num_of_nodes = self.adjacency_matrix.shape[0]
 
-        print("mem1", mem)
-        calcResults[blockspergrid, threadsperblock](cuda_adj, cuda_acts, cuda_mem)
+        total_size = Y.shape[0]*X.shape[0]
+        num_of_batches = int(math.ceil(total_size/self.batch_size))
+        print("num_of_batches", num_of_batches)
+        for batch_i in range(num_of_batches):
+            t1 = timer()
 
-        mem = cuda_mem.copy_to_host()
-        print("mem2", mem)
+            start_index = batch_i*self.batch_size
 
-        outputs = mem.T[-self.out_nodes:]
+            array = np.empty((self.batch_size, 4))
+            mem = np.empty((self.batch_size, num_of_nodes))
 
-        print("outputs:", outputs)
+            cuda_mem = cuda.to_device(mem)
+
+            calcResults2[blockspergrid, threadsperblock](X, Y, cuda_adj, cuda_acts, cuda_mem, start_index)
+
+            mem = cuda_mem.copy_to_host()
+            outputs = mem.T[-self.num_out_nodes:].T
+
+            t2 = timer()
+            print("Batch: {} | Time: {}".format(batch_i, t2-t1))
+            print(outputs)
 
         return outputs
+
+
+# print(i%X.shape[0], abs(i%Y.shape[0]-math.floor(i/X.shape[0]))) 
+
+# @njit
+@cuda.jit(device=True)
+def calculateLinks(X, Y, start_index, array):
+    x_size = X.shape[0]
+    y_size = Y.shape[0]
+    array_size = array.shape[0]
+    range_end = start_index + array_size
+
+    for i in range(array_size):
+        if range_end >= x_size*y_size:
+            break
+
+        batch_i = start_index+i
+        x = int(batch_i%x_size)
+        y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
+        
+        # print(x, y)
+        # print(array.shape, X[x].shape)
+        array[0] = X[x][0]
+        array[1] = X[x][1]
+        array[2] = Y[y][0]
+        array[3] = Y[y][1]
+
+
+# @cuda.jit
+# def calculateLinks(X, Y):
+#     array = np.empty((Y.shape[0], 4))
+#     # for i, x in enumerate(X):
+#     for i, y in enumerate(Y):
+#         coords = np.array([x, y]).flatten()
+#         # print(array[i, :], coords)
+#         array[i, :] = coords
+
 
 @cuda.jit(device=True)
 def feedForward(adj, acts, mem):
@@ -106,6 +167,7 @@ def feedForward(adj, acts, mem):
         for k in range(weights.shape[0]):
             result += weights[k]*mem[k]
 
+        # print(result)
         function = acts[col_i]
         if function == 0:
             mem[col_i] = math.tanh(result)
@@ -114,12 +176,45 @@ def feedForward(adj, acts, mem):
         elif function == 2:
             mem[col_i] = math.cos(result)
 
+        # print(mem[col_i])
+
 @cuda.jit(void(float64[:, :], int64[:], float64[:, :]))
 def calcResults(adj, acts, mem):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
     if i >= mem.shape[0]:
         return
+
+    feedForward(adj, acts, mem[i])
+
+@cuda.jit
+def calcResults2(X, Y, adj, acts, mem, start_index):
+    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+
+
+    # for batch_i in range(num_of_batches):
+    # print(i, start_index, mem.shape, mem[i].shape)
+    # print(mem[i].shape)
+    calculateLinks(X, Y, start_index, mem[i])
+    # print(mem[i])
+    # if i >= mem.shape[0]:
+    #     return
+
+    # x_size = X.shape[0]
+    # y_size = Y.shape[0]
+
+    # print(x_size, y_size)
+
+    # x = int(i%x_size)
+    # y = int(abs(i%y_size-math.floor(i/x_size)))
+    # num_of_inputs = X.shape[1] + Y.shape[1]
+    
+    # print(i, X[x], Y[y])
+
+    # mem[i][:2] = X[x]
+    # mem[i][2:4] = Y[y]
+
+    # print(mem)
 
     feedForward(adj, acts, mem[i])
 
@@ -136,8 +231,8 @@ class Phenotype:
         self.start_nodes = [n for n,d in self.graph.in_degree() if d == 0]
         self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
-        self.adj = nx.adjacency_matrix(self.graph).todense()
+        self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
         
         self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()])
 
-        self.execution = Execution(self.adj, self.activations, self.adj.shape[0], len(self.in_nodes), len(self.out_nodes))
+        # self.execution = Execution(self.adj, self.activations, self.adj.shape[0], len(self.in_nodes), len(self.out_nodes))
