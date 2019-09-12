@@ -67,11 +67,12 @@ class Execution(object):
     # def update(self, inputs):
     def update(self, X):
         Y = np.empty(X.shape)
-        # for inputs_i, inputs in enumerate(X):
         num_of_nodes = self.adjacency_matrix.shape[0]
         mem = np.zeros((X.shape[0], num_of_nodes))
         mem[:, :X.shape[1]] = X
         
+        print(mem)
+
         cuda_adj = cuda.to_device(self.adjacency_matrix)
         cuda_acts = cuda.to_device(self.activations)
         cuda_mem = cuda.to_device(mem)
@@ -80,31 +81,29 @@ class Execution(object):
         
         threadsperblock = 32
         blockspergrid = (X.shape[0] + (threadsperblock - 1)) // threadsperblock
+
+        print("cuda", blockspergrid, threadsperblock)
+
         print("mem1", mem)
         calcResults[blockspergrid, threadsperblock](cuda_adj, cuda_acts, cuda_mem)
-        print("mem2", mem)
 
         mem = cuda_mem.copy_to_host()
+        print("mem2", mem)
 
-        # outputs = np.array([mem[num_of_nodes - n - 1] for n in range(self.out_nodes)])
+        outputs = mem.T[-self.out_nodes:]
 
-        return []
+        print("outputs:", outputs)
+
+        return outputs
 
 @cuda.jit(device=True)
 def feedForward(adj, acts, mem):
-    # print(adj)
-    # mem = numba.cuda.device_array(adj.shape[0])
-    # mem = numba.cuda.local.array(adj.shape[0])
     adj_t = adj.T
     for col_i in range(adj_t.shape[0]):
-        print("col_i", col_i)
-        print("adj_t", adj_t.shape[0])
+
         weights = adj_t[col_i]
-        # print(weights)
         result = 0.0
         for k in range(weights.shape[0]):
-            print("k", k)
-            print("weight", weights[k])
             result += weights[k]*mem[k]
 
         function = acts[col_i]
@@ -115,18 +114,14 @@ def feedForward(adj, acts, mem):
         elif function == 2:
             mem[col_i] = math.cos(result)
 
-        return mem
-
 @cuda.jit(void(float64[:, :], int64[:], float64[:, :]))
 def calcResults(adj, acts, mem):
-    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x - 1
-    currMem = mem[i]
+    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-    print("idx", i)
+    if i >= mem.shape[0]:
+        return
 
-    # mem[i] = feedForward(adj, acts, currMem)
-    feedForward(adj, acts, currMem)
-
+    feedForward(adj, acts, mem[i])
 
 
 
