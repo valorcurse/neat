@@ -65,27 +65,6 @@ class SubstrateCUDA(object):
         self.num_out_nodes = len(self.phenotype.out_nodes)
 
         self.batch_size = 50 * 10**6
-    # def update(self, X):
-    #     # Y = np.empty(X.shape)
-    #     num_of_nodes = self.adjacency_matrix.shape[0]
-    #     mem = np.zeros((X.shape[0], num_of_nodes))
-    #     mem[:, :X.shape[1]] = X
-    #     # print(mem)
-
-    #     cuda_adj = cuda.to_device(self.adjacency_matrix)
-    #     cuda_acts = cuda.to_device(self.activations)
-    #     cuda_mem = cuda.to_device(mem)
-
-    #     threadsperblock = 32
-    #     blockspergrid = (X.shape[0] + (threadsperblock - 1)) // threadsperblock
-
-    #     calcResults[blockspergrid, threadsperblock](cuda_adj, cuda_acts, cuda_mem)
-
-    #     mem = cuda_mem.copy_to_host()
-    #     outputs = mem.T[-self.num_out_nodes:].T
-
-    #     return outputs
-
 
     def update(self, X, Y):
         cuda_adj = cuda.to_device(self.adjacency_matrix)
@@ -112,9 +91,7 @@ class SubstrateCUDA(object):
 
             calcResults2[blockspergrid, threadsperblock](X, Y, cuda_adj, cuda_acts, cuda_mem, start_index, cuda_results)
 
-            # mem = cuda_mem.copy_to_host()
             results = cuda_results.copy_to_host()
-            # outputs = mem.T[-self.num_out_nodes:].T
 
             t2 = timer()
             print("Batch: {} | Time: {}".format(batch_i, t2-t1))
@@ -141,22 +118,10 @@ def calculateLinks(X, Y, start_index, array):
         x = int(batch_i%x_size)
         y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
         
-        # print(x, y)
-        # print(array.shape, X[x].shape)
         array[0] = X[x][0]
         array[1] = X[x][1]
         array[2] = Y[y][0]
         array[3] = Y[y][1]
-
-
-# @cuda.jit
-# def calculateLinks(X, Y):
-#     array = np.empty((Y.shape[0], 4))
-#     # for i, x in enumerate(X):
-#     for i, y in enumerate(Y):
-#         coords = np.array([x, y]).flatten()
-#         # print(array[i, :], coords)
-#         array[i, :] = coords
 
 
 @cuda.jit(device=True)
@@ -169,7 +134,6 @@ def feedForward(adj, acts, mem):
         for k in range(weights.shape[0]):
             result += weights[k]*mem[k]
 
-        # print(result)
         function = acts[col_i]
         if function == 0:
             mem[col_i] = math.tanh(result)
@@ -177,8 +141,6 @@ def feedForward(adj, acts, mem):
             mem[col_i] = math.sin(result)
         elif function == 2:
             mem[col_i] = math.cos(result)
-
-        # print(mem[col_i])
 
 @cuda.jit(void(float64[:, :], int64[:], float64[:, :]))
 def calcResults(adj, acts, mem):
@@ -205,7 +167,6 @@ def calcResults2(X, Y, adj, acts, mem, start_index, results):
 class Phenotype:
 
     def __init__(self, graph, ID: int) -> None:
-        # self.neurons = neurons
         self.ID = ID
         self.graph = graph
 
@@ -215,5 +176,3 @@ class Phenotype:
         self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
         
         self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()])
-
-        # self.execution = Execution(self.adj, self.activations, self.adj.shape[0], len(self.in_nodes), len(self.out_nodes))
