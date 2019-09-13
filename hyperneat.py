@@ -107,7 +107,9 @@ class HyperNEAT(NEAT):
         # cppn_exec = cppnPheno.execution
         
         graph = nx.DiGraph()
-        graph.add_nodes_from([(n.ID,  {"activation": n.activation}) for n in self.substrateNeurons])
+        graph.add_nodes_from([(n.ID,  {"activation": n.activation}) for n in self.substrateNeurons if n.neuronType != NeuronType.HIDDEN])
+        # graph.add_nodes_from([(n.ID,  {"activation": n.activation}) for n in self.substrateNeurons])
+
         nrOfInputs = self.n_inputs
         nrOfOutputs = self.n_outputs
 
@@ -126,24 +128,28 @@ class HyperNEAT(NEAT):
         # batch_size = 100000000
         for i in range(coordinates.shape[0] - 1):
             leftNeuronLayer = coordinates[i]
-
-            X = np.array([(n.x, n.ID) for n in leftNeuronLayer])
             leftDepth = leftNeuronLayer[0].y
 
-
+            X = np.array([(n.x, n.y) for n in leftNeuronLayer])
+            X_IDs = np.array([n.ID for n in leftNeuronLayer])
+            X_data = {"data": X, "IDs": X_IDs}
 
             for j in range(i+1, coordinates.shape[0]):
                 rightNeuronLayer = coordinates[j]
                 rightDepth = rightNeuronLayer[0].y
 
-                Y = np.array([(n.x, n.ID) for n in rightNeuronLayer])
+                Y = np.array([(n.x, n.y) for n in rightNeuronLayer])
+                Y_IDs = np.array([n.ID for n in rightNeuronLayer])
+                Y_data = {"data": Y, "IDs": Y_IDs}
 
                 links = np.empty((X.shape[0], 3))
 
                 substrateCUDA = SubstrateCUDA(cppnPheno)
-                outputs = substrateCUDA.update(X, Y)
+                outputs = substrateCUDA.update(X_data, Y_data)
+                # links.append(outputs)
+                graph.add_weighted_edges_from(outputs)
 
-        graph.add_weighted_edges_from(links)
-        graph.remove_nodes_from(list(nx.isolates(graph)))
+        # graph.add_weighted_edges_from(links)
+        # graph.remove_nodes_from(list(nx.isolates(graph)))
 
         return Phenotype(graph, cppn.ID)

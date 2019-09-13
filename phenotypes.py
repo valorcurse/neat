@@ -21,6 +21,9 @@ from neat.types import NeuronType
 
 from timeit import default_timer as timer
 
+np.set_printoptions(edgeitems=30, linewidth=100000, 
+    formatter=dict(float=lambda x: "%.3g" % x))
+
 class SNeuron:
     
     def __init__(self, neuronGene: NeuronGene) -> None:
@@ -64,18 +67,26 @@ class SubstrateCUDA(object):
         self.num_in_nodes = len(self.phenotype.in_nodes)
         self.num_out_nodes = len(self.phenotype.out_nodes)
 
-        self.batch_size = 50 * 10**6
+        self.batch_size = 10 * 10**7
 
     def update(self, X, Y):
+        
+        X_data = X["data"]
+        Y_data = Y["data"]
+
+        custom_sized_kernel = kernel_maker(self.adjacency_matrix.shape[0])
+        calculateSubstrate = cuda.jit('void(float64[:,:], float64[:,:], float64[:,:], int64[:], int64, float64[:,:])')(custom_sized_kernel)
+        assert '.local' in calculateSubstrate.ptx
+
+        num_of_nodes = self.adjacency_matrix.shape[0]
         cuda_adj = cuda.to_device(self.adjacency_matrix)
         cuda_acts = cuda.to_device(self.activations)
 
         threadsperblock = 32
         blockspergrid = (self.batch_size + (threadsperblock - 1)) // threadsperblock
 
-        num_of_nodes = self.adjacency_matrix.shape[0]
-
-        total_size = Y.shape[0]*X.shape[0]
+        links = []
+        total_size = Y_data.shape[0]*X_data.shape[0]
         num_of_batches = int(math.ceil(total_size/self.batch_size))
         print("num_of_batches", num_of_batches)
         for batch_i in range(num_of_batches):
@@ -83,46 +94,46 @@ class SubstrateCUDA(object):
 
             start_index = batch_i*self.batch_size
 
-            array = np.empty((self.batch_size, 4))
-            mem = np.empty((self.batch_size, num_of_nodes))
-            cuda_mem = cuda.to_device(mem)
             results = np.empty((self.batch_size, self.num_out_nodes))
             cuda_results = cuda.to_device(results)
 
-            calcResults2[blockspergrid, threadsperblock](X, Y, cuda_adj, cuda_acts, cuda_mem, start_index, cuda_results)
+            calculateSubstrate[blockspergrid, threadsperblock](X_data, Y_data, cuda_adj, cuda_acts, start_index, cuda_results)
 
             results = cuda_results.copy_to_host()
 
+
+            x_size = X_data.shape[0]
+            y_size = Y_data.shape[0]
+            nonzero = results.nonzero()
+            print(nonzero)
+            for r in nonzero[1]:
+                data_i = start_index+r - 1
+                # print(data_i)
+                x = int(data_i%x_size) - 1
+                y = int(abs(data_i%y_size-math.floor(data_i/x_size))) - 1
+                print(r, X["IDs"][x], Y["IDs"][y])
+                links.append((X["IDs"][x], Y["IDs"][y], results[0][r]))
+
             t2 = timer()
             print("Batch: {} | Time: {}".format(batch_i, t2-t1))
-            print(results)
 
-        return outputs
+        return links
 
-
-# print(i%X.shape[0], abs(i%Y.shape[0]-math.floor(i/X.shape[0]))) 
-
-# @njit
 @cuda.jit(device=True)
-def calculateLinks(X, Y, start_index, array):
+def calculateLinks(X, Y, start_index, i, mem):
     x_size = X.shape[0]
     y_size = Y.shape[0]
-    array_size = array.shape[0]
+    array_size = mem.shape[0]
     range_end = start_index + array_size
 
-    for i in range(array_size):
-        if range_end >= x_size*y_size:
-            break
-
-        batch_i = start_index+i
-        x = int(batch_i%x_size)
-        y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
-        
-        array[0] = X[x][0]
-        array[1] = X[x][1]
-        array[2] = Y[y][0]
-        array[3] = Y[y][1]
-
+    batch_i = start_index+i
+    x = int(batch_i%x_size)
+    y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
+    
+    mem[0] = X[x][0]
+    mem[1] = X[x][1]
+    mem[2] = Y[y][0]
+    mem[3] = Y[y][1]
 
 @cuda.jit(device=True)
 def feedForward(adj, acts, mem):
@@ -133,6 +144,7 @@ def feedForward(adj, acts, mem):
         result = 0.0
         for k in range(weights.shape[0]):
             result += weights[k]*mem[k]
+            # print(weights[k], mem[k])
 
         function = acts[col_i]
         if function == 0:
@@ -142,24 +154,46 @@ def feedForward(adj, acts, mem):
         elif function == 2:
             mem[col_i] = math.cos(result)
 
-@cuda.jit(void(float64[:, :], int64[:], float64[:, :]))
-def calcResults(adj, acts, mem):
-    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+        # print(mem[col_i])
 
-    if i >= mem.shape[0]:
-        return
+# @cuda.jit(void(float64[:, :], int64[:], float64[:, :]))
+# def calcResults(adj, acts, mem):
+#     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-    feedForward(adj, acts, mem[i])
+#     if i >= mem.shape[0]:
+#         return
 
+#     feedForward(adj, acts, mem[i])
+
+# some_size = 512
+# @cuda.jit("void(float64[:,:], float64[:,:], float64[:,:], int64[:], int64, int64, float64[:])")
 @cuda.jit
 def calcResults2(X, Y, adj, acts, mem, start_index, results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-    calculateLinks(X, Y, start_index, mem[i])
+    calculateLinks(X, Y, start_index, mem)
     feedForward(adj, acts, mem[i])
 
     results[i][0] = mem[i][-1]
     results[i][1] = mem[i][-2]
+
+def kernel_maker(size):
+    def impl(X, Y, adj, acts, start_index, results):
+        mem = cuda.local.array(size, dtype=float64)
+        
+        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+
+        calculateLinks(X, Y, start_index, i, mem)
+        # print(mem)
+        feedForward(adj, acts, mem)
+
+
+        # print(results[i][0], mem[size-1])
+        results[i][0] = mem[-1]
+        # results[i][1] = mem[-2]
+        # calcResults2(X, Y, adj, acts, mem, start_index, results)
+
+    return impl
 
 
 
