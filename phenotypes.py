@@ -55,8 +55,58 @@ class SLink:
 
         self.recurrent = recurrent
 
-# spec = [('adjacency_matrix', float64[:, :]), ('activations', int64[:]), ('num_of_nodes', int64), ('in_nodes', int64), ('out_nodes', int64)]
-# @jitclass(spec)
+# @invariant(lambda self: all(isinstance(x, SNeuron) for x in self.neurons), ValueError("Some neurons are not of type SNeuron."))
+class Phenotype:
+
+    def __init__(self, graph, ID: int) -> None:
+        self.ID = ID
+        self.graph = graph
+
+        self.start_nodes = [n for n,d in self.graph.in_degree() if d == 0]
+        self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
+        self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
+        self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
+        
+        self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()])
+
+    def update(self, X):
+        pass
+
+class FeedforwardCUDA(object):
+    def __init__(self, phenotypes: List[Phenotype]):
+        self.kernel_spec = 'void(float64[:,:], float64[:,:], int64[:], float64[:,:])'
+        self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p))) for p in phenotypes]
+
+        self.threads_per_block = 32
+
+    def kernel_maker(self, phenotype):
+        def impl(X, adj, acts, results):
+            i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+
+            mem = cuda.local.array(phenotype.adjacency_matrix.shape[0], dtype=float64)
+            feedForward(adj, acts, mem)
+
+            for i in range(phenotype.out_nodes):
+                results[i][0] = mem[-i]
+
+        return impl
+
+    def init_kernel(self, kernel):
+        return cuda.jit(self.kernel_spec)(kernel)
+
+    def update(self, X):
+        for x_i, x in enumerate(X):
+            phenotype, kernel = self.phenotypes[x_i] 
+            blockspergrid = (self.batch_size + (self.threads_per_block - 1)) // self.threads_per_block
+            
+            results = np.empty((1, phenotype.num_out_nodes))
+            cuda_results = cuda.to_device(results)
+
+            kernel[blockspergrid, self.threads_per_block](X, phenotype.adjacency_matrix, phenotype.activations)
+
+            results = cuda_results.copy_to_host()
+
+
 class SubstrateCUDA(object):
 
     def __init__(self, phenotype: Phenotype):
@@ -69,12 +119,25 @@ class SubstrateCUDA(object):
 
         self.batch_size = 10 * 10**7
 
+    def kernel_maker(self, size):
+        def impl(X, Y, adj, acts, start_index, results):
+            i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+
+            mem = cuda.local.array(size, dtype=float64)
+
+            calculateLinks(X, Y, start_index, i, mem)
+            feedForward(adj, acts, mem)
+
+            results[i][0] = mem[-1]
+
+        return impl
+
     def update(self, X, Y):
         
         X_data = X["data"]
         Y_data = Y["data"]
 
-        custom_sized_kernel = kernel_maker(self.adjacency_matrix.shape[0])
+        custom_sized_kernel = self.kernel_maker(self.adjacency_matrix.shape[0])
         calculateSubstrate = cuda.jit('void(float64[:,:], float64[:,:], float64[:,:], int64[:], int64, float64[:,:])')(custom_sized_kernel)
         assert '.local' in calculateSubstrate.ptx
 
@@ -82,8 +145,8 @@ class SubstrateCUDA(object):
         cuda_adj = cuda.to_device(self.adjacency_matrix)
         cuda_acts = cuda.to_device(self.activations)
 
-        threadsperblock = 32
-        blockspergrid = (self.batch_size + (threadsperblock - 1)) // threadsperblock
+        threads_per_block = 32
+        blockspergrid = (self.batch_size + (threads_per_block - 1)) // threads_per_block
 
         links = []
         total_size = Y_data.shape[0]*X_data.shape[0]
@@ -97,10 +160,9 @@ class SubstrateCUDA(object):
             results = np.empty((self.batch_size, self.num_out_nodes))
             cuda_results = cuda.to_device(results)
 
-            calculateSubstrate[blockspergrid, threadsperblock](X_data, Y_data, cuda_adj, cuda_acts, start_index, cuda_results)
+            calculateSubstrate[blockspergrid, threads_per_block](X_data, Y_data, cuda_adj, cuda_acts, start_index, cuda_results)
 
             results = cuda_results.copy_to_host()
-
 
             x_size = X_data.shape[0]
             y_size = Y_data.shape[0]
@@ -108,10 +170,8 @@ class SubstrateCUDA(object):
             print(nonzero)
             for r in nonzero[1]:
                 data_i = start_index+r - 1
-                # print(data_i)
                 x = int(data_i%x_size) - 1
                 y = int(abs(data_i%y_size-math.floor(data_i/x_size))) - 1
-                print(r, X["IDs"][x], Y["IDs"][y])
                 links.append((X["IDs"][x], Y["IDs"][y], results[0][r]))
 
             t2 = timer()
@@ -128,7 +188,10 @@ def calculateLinks(X, Y, start_index, i, mem):
 
     batch_i = start_index+i
     x = int(batch_i%x_size)
-    y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
+    # y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
+    y = int(abs((batch_i + math.floor(batch_i/x_size))%y_size))
+    # print(batch_i, X.shape, x, Y.shape, y)
+    # print(batch_i, y_size, x_size)
     
     mem[0] = X[x][0]
     mem[1] = X[x][1]
@@ -155,58 +218,3 @@ def feedForward(adj, acts, mem):
             mem[col_i] = math.cos(result)
 
         # print(mem[col_i])
-
-# @cuda.jit(void(float64[:, :], int64[:], float64[:, :]))
-# def calcResults(adj, acts, mem):
-#     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-
-#     if i >= mem.shape[0]:
-#         return
-
-#     feedForward(adj, acts, mem[i])
-
-# some_size = 512
-# @cuda.jit("void(float64[:,:], float64[:,:], float64[:,:], int64[:], int64, int64, float64[:])")
-@cuda.jit
-def calcResults2(X, Y, adj, acts, mem, start_index, results):
-    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-
-    calculateLinks(X, Y, start_index, mem)
-    feedForward(adj, acts, mem[i])
-
-    results[i][0] = mem[i][-1]
-    results[i][1] = mem[i][-2]
-
-def kernel_maker(size):
-    def impl(X, Y, adj, acts, start_index, results):
-        mem = cuda.local.array(size, dtype=float64)
-        
-        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-
-        calculateLinks(X, Y, start_index, i, mem)
-        # print(mem)
-        feedForward(adj, acts, mem)
-
-
-        # print(results[i][0], mem[size-1])
-        results[i][0] = mem[-1]
-        # results[i][1] = mem[-2]
-        # calcResults2(X, Y, adj, acts, mem, start_index, results)
-
-    return impl
-
-
-
-# @invariant(lambda self: all(isinstance(x, SNeuron) for x in self.neurons), ValueError("Some neurons are not of type SNeuron."))
-class Phenotype:
-
-    def __init__(self, graph, ID: int) -> None:
-        self.ID = ID
-        self.graph = graph
-
-        self.start_nodes = [n for n,d in self.graph.in_degree() if d == 0]
-        self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
-        self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
-        self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
-        
-        self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()])
