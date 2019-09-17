@@ -127,9 +127,9 @@ class SpeciatedPopulation(Population):
             self.currentGenomeID += 1
 
         # Temp 
-        for g in self.genomes:
-            for _ in range(50):
-                g.mutate(mutationRates)
+        # for g in self.genomes:
+            # for _ in range(50):
+                # g.mutate(mutationRates)
 
         # self.speciate()
 

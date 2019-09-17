@@ -62,9 +62,13 @@ class Phenotype:
         self.ID = ID
         self.graph = graph
 
+        # print(self.graph.nodes.data())
         self.start_nodes = [n for n,d in self.graph.in_degree() if d == 0]
         self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
+
+        # print("Nr. of nodes: {}".format(len(self.graph.nodes)))
+
         self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
         
         self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()])
@@ -75,37 +79,49 @@ class Phenotype:
 class FeedforwardCUDA(object):
     def __init__(self, phenotypes: List[Phenotype]):
         self.kernel_spec = 'void(float64[:,:], float64[:,:], int64[:], float64[:,:])'
-        self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p))) for p in phenotypes]
+        # self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p))) for p in phenotypes]
+        self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p.adjacency_matrix.shape[0]))) for p in phenotypes]
 
         self.threads_per_block = 32
 
-    def kernel_maker(self, phenotype):
+    def kernel_maker(self, adj_size):
         def impl(X, adj, acts, results):
             i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-            mem = cuda.local.array(phenotype.adjacency_matrix.shape[0], dtype=float64)
-            feedForward(adj, acts, mem)
+            mem = cuda.local.array(adj_size, dtype=float64)
+            for x_i, x in enumerate(X):
+                mem[x_i] = x
 
-            for i in range(phenotype.out_nodes):
-                results[i][0] = mem[-i]
+            # print("Before: {}".format(mem))
+            feedForward(adj, acts, mem)
+            # print("After: {}".format(mem))
+
+            for j in range(results.shape[0]):
+                results[j] = mem[-j - 1]
+
+            # print(results, mem)
 
         return impl
 
     def init_kernel(self, kernel):
-        return cuda.jit(self.kernel_spec)(kernel)
+        return cuda.jit(self.kernel_spec, debug=True)(kernel)
 
     def update(self, X):
+        outputs = []
         for x_i, x in enumerate(X):
             phenotype, kernel = self.phenotypes[x_i] 
-            blockspergrid = (self.batch_size + (self.threads_per_block - 1)) // self.threads_per_block
+            blockspergrid = (len(self.phenotypes) + (self.threads_per_block - 1)) // self.threads_per_block
             
-            results = np.empty((1, phenotype.num_out_nodes))
+            results = np.empty(len(phenotype.out_nodes))
             cuda_results = cuda.to_device(results)
+            x_cuda = cuda.to_device(x)
 
-            kernel[blockspergrid, self.threads_per_block](X, phenotype.adjacency_matrix, phenotype.activations)
+            kernel[blockspergrid, self.threads_per_block](x_cuda, phenotype.adjacency_matrix, phenotype.activations, cuda_results)
 
             results = cuda_results.copy_to_host()
+            outputs.append(results)
 
+        return outputs
 
 class SubstrateCUDA(object):
 
@@ -122,6 +138,8 @@ class SubstrateCUDA(object):
     def kernel_maker(self, size):
         def impl(X, Y, adj, acts, start_index, results):
             i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+            if i >= results.shape[0]:
+                return
 
             mem = cuda.local.array(size, dtype=float64)
 
@@ -145,19 +163,18 @@ class SubstrateCUDA(object):
         cuda_adj = cuda.to_device(self.adjacency_matrix)
         cuda_acts = cuda.to_device(self.activations)
 
+        total_size = Y_data.shape[0]*X_data.shape[0]
+        b_size = min(self.batch_size, total_size)
+
         threads_per_block = 32
-        blockspergrid = (self.batch_size + (threads_per_block - 1)) // threads_per_block
+        blockspergrid = (b_size + (threads_per_block - 1)) // threads_per_block
 
         links = []
-        total_size = Y_data.shape[0]*X_data.shape[0]
-        num_of_batches = int(math.ceil(total_size/self.batch_size))
-        print("num_of_batches", num_of_batches)
+        num_of_batches = int(math.ceil(total_size/b_size))
         for batch_i in range(num_of_batches):
-            t1 = timer()
+            start_index = batch_i*b_size
 
-            start_index = batch_i*self.batch_size
-
-            results = np.empty((self.batch_size, self.num_out_nodes))
+            results = np.empty((b_size, self.num_out_nodes))
             cuda_results = cuda.to_device(results)
 
             calculateSubstrate[blockspergrid, threads_per_block](X_data, Y_data, cuda_adj, cuda_acts, start_index, cuda_results)
@@ -167,15 +184,17 @@ class SubstrateCUDA(object):
             x_size = X_data.shape[0]
             y_size = Y_data.shape[0]
             nonzero = results.nonzero()
-            print(nonzero)
-            for r in nonzero[1]:
+            for r in nonzero[0]:
                 data_i = start_index+r - 1
                 x = int(data_i%x_size) - 1
                 y = int(abs(data_i%y_size-math.floor(data_i/x_size))) - 1
-                links.append((X["IDs"][x], Y["IDs"][y], results[0][r]))
 
-            t2 = timer()
-            print("Batch: {} | Time: {}".format(batch_i, t2-t1))
+                out_node = X["IDs"][x]
+                in_node = Y["IDs"][y]
+                weight = results[r][0]
+                edge = (out_node, in_node, weight)
+                links.append(edge)
+
 
         return links
 
@@ -188,8 +207,8 @@ def calculateLinks(X, Y, start_index, i, mem):
 
     batch_i = start_index+i
     x = int(batch_i%x_size)
-    # y = int(abs(batch_i%y_size-math.floor(batch_i/x_size)))
     y = int(abs((batch_i + math.floor(batch_i/x_size))%y_size))
+
     # print(batch_i, X.shape, x, Y.shape, y)
     # print(batch_i, y_size, x_size)
     

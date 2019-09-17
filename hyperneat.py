@@ -55,6 +55,8 @@ class HyperNEAT(NEAT):
                     self.substrateNeurons.append(NeuronGene(NeuronType.HIDDEN, len(self.substrateNeurons), y, x))
 
 
+        print("Nodes in substrate: {}".format(len(self.substrateNeurons)))
+
         population_configuration._data["n_inputs"] = 4
         population_configuration._data["n_outputs"] = 1
         self.neat = NEAT(population_configuration, mutation_rates)
@@ -68,7 +70,7 @@ class HyperNEAT(NEAT):
         cppns = self.neat.population.reproduce()
         substrates = []
         for i, c in enumerate(cppns):
-            print("epoch:", i)
+            # print("epoch:", i)
             substrates.append(self.createSubstrate(c))
             
             print("\rCreated substrates: %d/%d"%(i, len(cppns)), end='')
@@ -85,11 +87,12 @@ class HyperNEAT(NEAT):
         cppnPheno = cppn.createPhenotype()
         
         graph = nx.DiGraph()
-        graph.add_nodes_from([(n.ID,  {"activation": n.activation, "type": n.neuronType}) for n in self.substrateNeurons if n.neuronType != NeuronType.HIDDEN])
+        # graph.add_nodes_from([(n.ID,  {"activation": n.activation, "type": n.neuronType}) for n in self.substrateNeurons if n.neuronType != NeuronType.HIDDEN])
+        graph.add_nodes_from([(n.ID,  {"activation": n.activation, "type": n.neuronType}) for n in self.substrateNeurons])
         
         paths = [list(nx.all_simple_paths(cppnPheno.graph, source=n[0], target=[o[0] for o in cppnPheno.out_nodes])) for n in cppnPheno.in_nodes]
         num_of_paths = len([p for p in paths if len(p) > 0])
-        print("Nr. of paths in cppn: {}".format(num_of_paths))
+        # print("Nr. of paths in cppn: {}".format(num_of_paths))
         if num_of_paths == 0:
             return Phenotype(graph, cppn.ID)
 
@@ -123,17 +126,18 @@ class HyperNEAT(NEAT):
                 links = np.empty((X.shape[0], 3))
 
                 substrateCUDA = SubstrateCUDA(cppnPheno)
-                print(X_data, Y_data)
                 outputs = substrateCUDA.update(X_data, Y_data)
+                print("outputs:", outputs)
+
                 graph.add_weighted_edges_from(outputs)
 
         # graph.add_weighted_edges_from(links)
         isolated_hidden = [n for n in nx.isolates(graph) if graph.nodes[n]['type'] == NeuronType.HIDDEN]
         # isolated_hidden = [graph.nodes[n] for n in nx.isolates(graph)]
-        print(isolated_hidden)
+        # print(isolated_hidden)
         graph.remove_nodes_from(isolated_hidden)
 
-        print("Nodes in phenotype: {}".format(len(graph.nodes)))
-        print("Edges in phenotype: {}".format(len(graph.edges)))
+        # print("Nodes in phenotype: {}".format(len(graph.nodes)))
+        # print("Edges in phenotype: {}".format(len(graph.edges)))
 
         return Phenotype(graph, cppn.ID)
