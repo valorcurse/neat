@@ -1,24 +1,16 @@
-from typing import List, Set, Dict, Tuple, Optional
+from typing import List
 
 import numpy as np
-from copy import deepcopy
 
 from neat.neat import NEAT
-from neat.utils import fastCopy
-from neat.types import NeuronType
+from neat.neatTypes import NeuronType
 from neat.phenotypes import Phenotype, SubstrateCUDA
 from neat.population import PopulationUpdate, PopulationConfiguration
-from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
+from neat.genes import Genome, NeuronGene, MutationRates
 
 import networkx as nx
-from numba import jit, njit, generated_jit, int64, float64, cuda, jitclass, void
-
-import math
 
 from itertools import groupby
-
-from timeit import default_timer as timer
-from visualize import Visualize
 
 
 class HyperNEAT(NEAT):
@@ -127,7 +119,7 @@ class HyperNEAT(NEAT):
 
                 substrateCUDA = SubstrateCUDA(cppnPheno)
                 outputs = substrateCUDA.update(X_data, Y_data)
-                print("outputs:", outputs)
+                # print("outputs:", outputs)
 
                 graph.add_weighted_edges_from(outputs)
 

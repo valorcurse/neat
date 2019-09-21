@@ -1,15 +1,12 @@
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 
 import random
-import pickle
 
 from neat.utils import fastCopy
 from neat.innovations import Innovations
 from neat.genes import Genome, LinkGene, NeuronGene, MutationRates
 import neat.phenotypes as phenos
 
-
-from collections.abc import Mapping
 
 class ParameterDict:
     def __init__(self):

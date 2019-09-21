@@ -1,35 +1,26 @@
 from __future__ import annotations
 
-from typing import List, Set, Dict, Tuple, Optional, Any
+from typing import List, Dict, Optional, Any
 
-from icontract import invariant, require, ensure
+from icontract import invariant, require
 
 from queue import Queue
 
 import random
-from random import randint
 
 import math
-from math import cos, sin, atan, ceil, floor
-from sklearn.preprocessing import normalize
-from numba import jit, njit, int32, float32, cuda
-
+from numba import jit
 
 from enum import Enum
 import itertools
-from itertools import groupby
 
 import numpy as np
-from matplotlib import pyplot
-import matplotlib.patches as patches
 import networkx as nx
 
-from prettytable import PrettyTable
-
 import neat.phenotypes
-from neat.types import NeuronType
+from neat.neatTypes import NeuronType
 from neat.innovations import Innovations, Innovation
-from neat.utils import find, fastCopy
+from neat.utils import fastCopy
 
 class Species:
     pass
@@ -549,7 +540,7 @@ class Genome:
 
 
     def createPhenotype(self) -> neat.phenotypes.Phenotype:
-        from neat.phenotypes import SLink, SNeuron
+        from neat.phenotypes import SNeuron
         phenotypeNeurons: List[SNeuron] = []
         phenoGraph = nx.DiGraph()
 

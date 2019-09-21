@@ -1,13 +1,14 @@
-from typing import List, Dict, Optional, Tuple, Text
+from typing import List, Optional
 
 from neat.innovations import Innovations
-from neat.genes import Genome, NeuronGene, LinkGene, Phase, MutationRates
+from neat.genes import Genome, NeuronGene, LinkGene, MutationRates
 from neat.population import Population, PopulationConfiguration, PopulationUpdate
 
 
 import random
 import numpy as np
-from icontract import invariant, require, ensure
+from icontract import require
+
 
 class Feature:
 

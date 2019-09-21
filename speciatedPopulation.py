@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import neat.genes as genes
 from neat.utils import fastCopy
@@ -7,7 +7,7 @@ from neat.population import Population, PopulationConfiguration, PopulationUpdat
 
 import math
 import random
-from icontract import invariant, require, ensure
+from icontract import require
 
 
 class Species:
@@ -136,7 +136,7 @@ class SpeciatedPopulation(Population):
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
         print(len(update.fitness), len(self.genomes))
-        # Set fitness score to their respesctive genome
+        # Set fitness score to their respective genome
         for index, genome in enumerate(self.genomes):
             genome.fitness = update.fitness[index]
 

@@ -1,27 +1,18 @@
 from __future__ import annotations
 
-from typing import List, Set, Dict, Tuple, Optional, Any, Callable
-from icontract import invariant, require, ensure
-from enum import Enum
+from typing import List
 
 import math
-from math import cos, sin, atan, ceil, floor
-from queue import Queue
 
 import numpy as np
-from scipy import special
-import numba
-from numba import types
-from numba import jit, njit, generated_jit, int64, float64, cuda, jitclass, void, vectorize
+from numba import float64, cuda, vectorize
 
 import networkx as nx
 
 from neat.genes import NeuronGene, FuncsEnum
-from neat.types import NeuronType
+from neat.neatTypes import NeuronType
 
-from timeit import default_timer as timer
-
-np.set_printoptions(edgeitems=30, linewidth=100000, 
+np.set_printoptions(edgeitems=30, linewidth=100000,
     formatter=dict(float=lambda x: "%.3g" % x))
 
 class SNeuron:
@@ -78,7 +69,7 @@ class Phenotype:
 
 class FeedforwardCUDA(object):
     def __init__(self, phenotypes: List[Phenotype]):
-        self.kernel_spec = 'void(float64[:,:], float64[:,:], int64[:], float64[:,:])'
+        self.kernel_spec = 'void(float64[:], float64[:,:], int64[:], float64[:])'
         # self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p))) for p in phenotypes]
         self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p.adjacency_matrix.shape[0]))) for p in phenotypes]
 
@@ -89,34 +80,34 @@ class FeedforwardCUDA(object):
             i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
             mem = cuda.local.array(adj_size, dtype=float64)
-            for x_i, x in enumerate(X):
+            mem[0] = 1.0
+            for x_i in range(mem.shape[0]):
+                x = X[x_i]
                 mem[x_i] = x
 
-            # print("Before: {}".format(mem))
             feedForward(adj, acts, mem)
-            # print("After: {}".format(mem))
 
             for j in range(results.shape[0]):
                 results[j] = mem[-j - 1]
 
-            # print(results, mem)
-
         return impl
 
     def init_kernel(self, kernel):
-        return cuda.jit(self.kernel_spec, debug=True)(kernel)
+        return cuda.jit(self.kernel_spec)(kernel)
 
     def update(self, X):
         outputs = []
         for x_i, x in enumerate(X):
-            phenotype, kernel = self.phenotypes[x_i] 
+            phenotype, kernel = self.phenotypes[x_i]
             blockspergrid = (len(self.phenotypes) + (self.threads_per_block - 1)) // self.threads_per_block
-            
+
             results = np.empty(len(phenotype.out_nodes))
+            cuda_adj = cuda.to_device(phenotype.adjacency_matrix)
+            cuda_acts = cuda.to_device(phenotype.activations)
             cuda_results = cuda.to_device(results)
             x_cuda = cuda.to_device(x)
 
-            kernel[blockspergrid, self.threads_per_block](x_cuda, phenotype.adjacency_matrix, phenotype.activations, cuda_results)
+            kernel[blockspergrid, self.threads_per_block](x_cuda, cuda_adj, cuda_acts, cuda_results)
 
             results = cuda_results.copy_to_host()
             outputs.append(results)

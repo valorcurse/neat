@@ -1,7 +1,7 @@
-from typing import List, Set, Dict, Tuple, Optional, Any
+from typing import List, Optional
 from enum import Enum
 
-from neat.types import NeuronType
+from neat.neatTypes import NeuronType
 
 class InnovationType(Enum):
     NEURON = 0

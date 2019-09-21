@@ -1,29 +1,11 @@
-from typing import List, Set, Dict, Tuple, Optional
-
-import random
-from random import randint
-
-import math
-import numpy as np
-from enum import Enum
-
-import itertools
-from copy import copy
-from copy import deepcopy
-from operator import attrgetter
-from collections import OrderedDict
-
-from prettytable import PrettyTable
-
-import pickle
+from typing import List
 
 import neat.innovations
 from neat.phenotypes import Phenotype
-from neat.types import NeuronType
-from neat.mapelites import MapElites, MapElitesConfiguration, MapElitesUpdate
+from neat.mapelites import MapElites, MapElitesConfiguration
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
 from neat.population import PopulationUpdate, PopulationConfiguration, Population
-from neat.genes import Genome, LinkGene, NeuronGene, MutationRates, Phase, SpeciationType
+from neat.genes import MutationRates, Phase, SpeciationType
 
 class NEAT:
 
