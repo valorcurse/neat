@@ -3,14 +3,19 @@ from __future__ import annotations
 from typing import List
 
 import math
-
 import numpy as np
-from numba import float64, cuda, vectorize
-
 import networkx as nx
+import numba
+from numba import float64, cuda, jit, vectorize, guvectorize, int64
+from numba.types import List
+import multiprocessing as mp
+# from pathos.multiprocessing import ProcessPool
+from joblib import Parallel, delayed
 
 from neat.genes import NeuronGene, FuncsEnum
 from neat.neatTypes import NeuronType
+
+from copy import deepcopy
 
 np.set_printoptions(edgeitems=30, linewidth=100000,
     formatter=dict(float=lambda x: "%.3g" % x))
@@ -69,18 +74,24 @@ class Phenotype:
 
 class FeedforwardCUDA(object):
     def __init__(self, phenotypes: List[Phenotype]):
-        self.kernel_spec = 'void(float64[:], float64[:,:], int64[:], float64[:])'
-        # self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p))) for p in phenotypes]
-        self.phenotypes = [(p, self.init_kernel(self.kernel_maker(p.adjacency_matrix.shape[0]))) for p in phenotypes]
+        self.kernel_spec = 'void(float64[:], float64[:])'
+        self.cuda_kernels_data = [self.init_kernel(p) for p in phenotypes]
 
-        self.threads_per_block = 32
+        self.threadsperblock = 32
+        self.blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
 
-    def kernel_maker(self, adj_size):
-        def impl(X, adj, acts, results):
-            i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+        self.phenotypes = phenotypes
+
+        mpc = mp.get_context('spawn')
+        num_of_outputs = len(self.phenotypes[0].out_nodes)
+        self.pool = mpc.Pool(4, parallel_init, [self.threadsperblock, self.blockspergrid, num_of_outputs])
+
+    def kernel_maker(self, adj_size, adj, acts):
+        def impl(X, results):
+            # i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+            i = cuda.grid(1)
 
             mem = cuda.local.array(adj_size, dtype=float64)
-            mem[0] = 1.0
             for x_i in range(mem.shape[0]):
                 x = X[x_i]
                 mem[x_i] = x
@@ -92,27 +103,58 @@ class FeedforwardCUDA(object):
 
         return impl
 
-    def init_kernel(self, kernel):
+    def init_kernel(self, phenotype):
+        # cuda_acts = cuda.to_device(phenotype.activations)
+        # cuda_adj = cuda.to_device(phenotype.adjacency_matrix)
+
+        # kernel = self.kernel_maker(phenotype.adjacency_matrix.shape[0])
+        kernel = self.kernel_maker(phenotype.adjacency_matrix.shape[0], phenotype.adjacency_matrix, phenotype.activations)
+
         return cuda.jit(self.kernel_spec)(kernel)
 
+    def plus1_maker(self):
+        def impl(arr):
+            i = cuda.grid(1)
+            if i < arr.size:
+                arr[i] += 1
+
+        return impl
+
+
+
     def update(self, X):
-        outputs = []
-        for x_i, x in enumerate(X):
-            phenotype, kernel = self.phenotypes[x_i]
-            blockspergrid = (len(self.phenotypes) + (self.threads_per_block - 1)) // self.threads_per_block
 
-            results = np.empty(len(phenotype.out_nodes))
-            cuda_adj = cuda.to_device(phenotype.adjacency_matrix)
-            cuda_acts = cuda.to_device(phenotype.activations)
-            cuda_results = cuda.to_device(results)
-            x_cuda = cuda.to_device(x)
-
-            kernel[blockspergrid, self.threads_per_block](x_cuda, cuda_adj, cuda_acts, cuda_results)
-
-            results = cuda_results.copy_to_host()
-            outputs.append(results)
+        outputs = self.pool.map(parallel_update, zip(X, self.cuda_kernels_data))
 
         return outputs
+
+
+def parallel_update(kernel_data):
+    x, kernel = kernel_data
+
+    results = np.zeros(parallel_update.num_of_outputs)
+    cuda_results = cuda.to_device(results)
+
+    # print("Calling kernel")
+    kernel[parallel_update.blockspergrid, parallel_update.threadsperblock](x, cuda_results)
+
+    results = cuda_results.copy_to_host()
+
+    # print(results)
+
+    return results
+
+def parallel_init(threadsperblock, blockspergrid, num_of_outputs):
+    parallel_update.threadsperblock = threadsperblock
+    parallel_update.blockspergrid = blockspergrid
+    parallel_update.num_of_outputs = num_of_outputs
+
+def kernel_m():
+    def plus1(arr):
+        i = cuda.grid(1)
+        if i < arr.size:
+            arr[i] += 1
+    return plus1
 
 class SubstrateCUDA(object):
 
