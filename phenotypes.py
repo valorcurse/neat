@@ -6,14 +6,15 @@ import math
 import numpy as np
 import networkx as nx
 import numba
-from numba import float64, cuda, jit, vectorize, guvectorize, int64
+from numba import float64, cuda, jit, vectorize, guvectorize, int64, float32
 from numba.types import List
 import multiprocessing as mp
 # from pathos.multiprocessing import ProcessPool
 from joblib import Parallel, delayed
 
-from neat.genes import NeuronGene, FuncsEnum
 from neat.neatTypes import NeuronType
+from neat.genes import NeuronGene, FuncsEnum
+# from neat.cuda_matmult import cu_square_matrix_mul
 
 from copy import deepcopy
 
@@ -73,6 +74,8 @@ class Phenotype:
         pass
 
 class FeedforwardCUDA(object):
+
+
     def __init__(self, phenotypes: List[Phenotype]):
         self.kernel_spec = 'void(float64[:], float64[:])'
         self.cuda_kernels_data = [self.init_kernel(p) for p in phenotypes]
@@ -84,15 +87,15 @@ class FeedforwardCUDA(object):
 
         mpc = mp.get_context('spawn')
         num_of_outputs = len(self.phenotypes[0].out_nodes)
-        self.pool = mpc.Pool(4, parallel_init, [self.threadsperblock, self.blockspergrid, num_of_outputs])
+        self.pool = mpc.Pool(64, parallel_init, [self.threadsperblock, self.blockspergrid, num_of_outputs])
 
     def kernel_maker(self, adj_size, adj, acts):
         def impl(X, results):
             # i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-            i = cuda.grid(1)
+            # i = cuda.grid(1)
 
             mem = cuda.local.array(adj_size, dtype=float64)
-            for x_i in range(mem.shape[0]):
+            for x_i in range(X.shape[0]):
                 x = X[x_i]
                 mem[x_i] = x
 
@@ -110,23 +113,29 @@ class FeedforwardCUDA(object):
         # kernel = self.kernel_maker(phenotype.adjacency_matrix.shape[0])
         kernel = self.kernel_maker(phenotype.adjacency_matrix.shape[0], phenotype.adjacency_matrix, phenotype.activations)
 
-        return cuda.jit(self.kernel_spec)(kernel)
-
-    def plus1_maker(self):
-        def impl(arr):
-            i = cuda.grid(1)
-            if i < arr.size:
-                arr[i] += 1
-
-        return impl
-
+        return cuda.jit(self.kernel_spec, debug=True)(kernel)
 
 
     def update(self, X):
 
-        outputs = self.pool.map(parallel_update, zip(X, self.cuda_kernels_data))
+        # results = np.zeros(4)
+        # cuda_results = cuda.to_device(results)
+        # self.cuda_kernels_data[0][self.blockspergrid, self.threadsperblock](X[0], cuda_results)
+        # results = cuda_results.copy_to_host()
 
-        return outputs
+        results = self.pool.map(parallel_update, zip(X, self.cuda_kernels_data))
+
+        # results = None
+        # done = False
+        while not done:
+            try:
+                results = self.pool.map(parallel_update, zip(X, self.cuda_kernels_data))
+            except:
+                pass
+            finally:
+                done = True
+
+        return results
 
 
 def parallel_update(kernel_data):
@@ -149,14 +158,9 @@ def parallel_init(threadsperblock, blockspergrid, num_of_outputs):
     parallel_update.blockspergrid = blockspergrid
     parallel_update.num_of_outputs = num_of_outputs
 
-def kernel_m():
-    def plus1(arr):
-        i = cuda.grid(1)
-        if i < arr.size:
-            arr[i] += 1
-    return plus1
 
 class SubstrateCUDA(object):
+
 
     def __init__(self, phenotype: Phenotype):
         self.phenotype = phenotype
@@ -210,7 +214,7 @@ class SubstrateCUDA(object):
             results = np.empty((b_size, self.num_out_nodes))
             cuda_results = cuda.to_device(results)
 
-            calculateSubstrate[blockspergrid, threads_per_block](X_data, Y_data, cuda_adj, cuda_acts, start_index, cuda_results)
+            calculateSubstrate[blockspergrid, threads_per_block](X_data, Y_data, self.adjacency_matrix, cuda_acts, start_index, cuda_results)
 
             results = cuda_results.copy_to_host()
 
@@ -219,8 +223,8 @@ class SubstrateCUDA(object):
             nonzero = results.nonzero()
             for r in nonzero[0]:
                 data_i = start_index+r - 1
-                x = int(data_i%x_size) - 1
-                y = int(abs(data_i%y_size-math.floor(data_i/x_size))) - 1
+                x = int(data_i % x_size) - 1
+                y = int(abs(data_i % y_size-math.floor(data_i/x_size))) - 1
 
                 out_node = X["IDs"][x]
                 in_node = Y["IDs"][y]
@@ -239,12 +243,9 @@ def calculateLinks(X, Y, start_index, i, mem):
     range_end = start_index + array_size
 
     batch_i = start_index+i
-    x = int(batch_i%x_size)
-    y = int(abs((batch_i + math.floor(batch_i/x_size))%y_size))
+    x = int(batch_i % x_size)
+    y = int(abs((batch_i + math.floor(batch_i/x_size)) % y_size))
 
-    # print(batch_i, X.shape, x, Y.shape, y)
-    # print(batch_i, y_size, x_size)
-    
     mem[0] = X[x][0]
     mem[1] = X[x][1]
     mem[2] = Y[y][0]
@@ -254,12 +255,14 @@ def calculateLinks(X, Y, start_index, i, mem):
 def feedForward(adj, acts, mem):
     adj_t = adj.T
     for col_i in range(adj_t.shape[0]):
+        weights = adj_t[col_i].T
 
-        weights = adj_t[col_i]
         result = 0.0
-        for k in range(weights.shape[0]):
-            result += weights[k]*mem[k]
-            # print(weights[k], mem[k])
+        for i in mem:
+            added = 0.0
+            for j in weights:
+                added += i*j
+            result += added
 
         function = acts[col_i]
         if function == 0:
@@ -269,4 +272,3 @@ def feedForward(adj, acts, mem):
         elif function == 2:
             mem[col_i] = math.cos(result)
 
-        # print(mem[col_i])
