@@ -121,6 +121,8 @@ class HyperNEAT(NEAT):
                 outputs = substrateCUDA.update(X_data, Y_data)
                 # print("outputs:", outputs)
 
+                nans = [l for l in outputs if l[2] == np.nan]
+
                 graph.add_weighted_edges_from(outputs)
 
         # graph.add_weighted_edges_from(links)

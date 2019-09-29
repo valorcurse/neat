@@ -59,15 +59,13 @@ class Phenotype:
         self.ID = ID
         self.graph = graph
 
-        # print(self.graph.nodes.data())
         self.start_nodes = [n for n,d in self.graph.in_degree() if d == 0]
         self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
 
-        # print("Nr. of nodes: {}".format(len(self.graph.nodes)))
+        # self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
+        self.adjacency_matrix = nx.to_numpy_matrix(self.graph)
 
-        self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
-        
         self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()])
 
     def update(self, X):
@@ -86,13 +84,6 @@ class FeedforwardCUDA(object):
         self.phenotypes = phenotypes
 
         self.num_of_outputs = len(self.phenotypes[0].out_nodes)
-        # cuda_memory = cuda.current_context().get_memory_info()
-
-        # mpc = mp.get_context('spawn')
-        # self.pool = mpc.Pool(64, parallel_init, [self.threadsperblock, self.blockspergrid, num_of_outputs])
-
-
-
 
     def kernel_maker(self, adj_size, adj, acts):
         def impl(X, results):
@@ -121,126 +112,22 @@ class FeedforwardCUDA(object):
 
 
     def update(self, X):
-
-        # results = np.zeros(4)
-        # cuda_results = cuda.to_device(results)
-        # self.cuda_kernels_data[0][self.blockspergrid, self.threadsperblock](X[0], cuda_results)
-        # results = cuda_results.copy_to_host()
-
-        # combined = list(zip(X, [(k, k.total_size) for k in self.cuda_kernels]))
-
-        # results = self.pool.map(parallel_update, combined)
-        # parallel_init(self.threadsperblock, self.blockspergrid, self.num_of_outputs)
-
-        # results = []
-        # for kernel_data in zip(X, self.cuda_kernels):
-        #     results.append(self.parallel_update(kernel_data))
-
-        # self.pool.close()
-        # self.pool.join()
-
-        # results = None
-        # done = False
-        # while not done:
-        #     try:
-        #         results = self.pool.map(parallel_update, zip(X, self.cuda_kernels))
-        #     except:
-        #         pass
-        #     finally:
-        #         done = True
-
         mem = np.array([np.zeros(p.adjacency_matrix.shape[0], dtype=np.float32) for p in self.phenotypes])
-        print(mem.shape, X.shape)
         mem[:, :X.shape[1]] = X
+
         adjs = np.array([p.adjacency_matrix for p in self.phenotypes])
         acts = np.array([p.activations for p in self.phenotypes])
-        results = np.array([np.empty(self.num_of_outputs, dtype=np.float32) for p in self.phenotypes])
+        results = np.array([np.empty(self.num_of_outputs, dtype=np.float32) for _ in self.phenotypes])
 
         cuda_mem = cuda.to_device(mem)
         cuda_adj = cuda.to_device(adjs)
         cuda_acts = cuda.to_device(acts)
         cuda_results = cuda.to_device(results)
-
-        print(cuda_mem.copy_to_host())
         execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_results)
-        print(cuda_mem.copy_to_host())
-        print("-------------------------------------------")
 
-        # results = cuda_results.copy_to_host()
-        results = cuda_mem.copy_to_host()
-        results = results[:, -self.num_of_outputs:]
-
-        # kernel, kernel_size = kernel_tuple
-        # for exec_data in zip(X, self.phenotypes):
-        #     x, phenotype = exec_data
-        #
-        #     result = np.empty(self.num_of_outputs, dtype=np.float32)
-        #     cuda_results = cuda.to_device(result)
-        #
-        #     adj_size = phenotype.adjacency_matrix.shape[0]
-        #     mem = np.zeros(adj_size, dtype=np.float32)
-        #     mem[:x.size] = x
-        #     cuda_mem = cuda.to_device(mem)
-        #
-        #     cuda_adj = cuda.to_device(phenotype.adjacency_matrix)
-        #     cuda_acts = cuda.to_device(phenotype.activations)
-
-            # free_memory = cuda.current_context().get_memory_info().free
-            # used_memory = kernel.total_size + x.size + results.size
-            # print("Kernel size: {} | Memory free: {} | Fits: {}".format(used_memory, free_memory, (used_memory < free_memory)))
-            # kernel[self.blockspergrid, self.threadsperblock](cuda_x, cuda_results)
-
-            # print(cuda_mem.copy_to_host())
-            #
-            # execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_results)
-            #
-            # print(cuda_mem.copy_to_host())
-            # print("---------------------")
-
-
-            # if np.nan in result:
-            #     print('lol')
-
-            # result = cuda_results.copy_to_host()
-            # results.append(result)
-
-        print("results")
-        print(results)
-        return results
-
-
-    def parallel_update(self, kernel_data):
-        x, kernel = kernel_data
-        # kernel, kernel_size = kernel_tuple
-
-
-        results = np.zeros(self.num_of_outputs)
-        cuda_results = cuda.to_device(results)
-
-        cuda_x = cuda.to_device(x)
-        cuda_adj = cuda.to_device(self.adjacency_matrix)
-        cuda_acts = cuda.to_device(self.activations)
-
-        # free_memory = cuda.current_context().get_memory_info().free
-        # used_memory = kernel.total_size + x.size + results.size
-        # print("Kernel size: {} | Memory free: {} | Fits: {}".format(used_memory, free_memory, (used_memory < free_memory)))
-        # kernel[self.blockspergrid, self.threadsperblock](cuda_x, cuda_results)
-
-
-        # execute_network[self.blockspergrid, self.threadsperblock](cuda_x, cuda_results, cuda_adj,.)
-
-        # results = cuda_results.copy_to_host()
-
-        # print(results)
+        results = cuda_results.copy_to_host()
 
         return results
-
-# Initializing the pool this way allows to pass 'global' variables to the function
-# def parallel_init(threadsperblock, blockspergrid, num_of_outputs):
-#     parallel_update.threadsperblock = threadsperblock
-#     parallel_update.blockspergrid = blockspergrid
-#     parallel_update.num_of_outputs = num_of_outputs
-
 
 class SubstrateCUDA(object):
 
@@ -339,8 +226,6 @@ def feedForward(adj, acts, mem):
     for col_i in range(adj_t.shape[0]):
         weights = adj_t[col_i].T
 
-        # print(weights)
-
         result = 0.0
         for i in mem:
             # if i != 0.0:
@@ -359,11 +244,9 @@ def feedForward(adj, acts, mem):
         elif function == 2:
             mem[col_i] += math.cos(result)
 
-    # def kernel_maker(self, adj_size, adj, acts):
 @cuda.jit()
 def execute_network(all_mem, all_adj, all_acts, all_results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    # i = cuda.grid(1)
 
     if i >= all_mem.shape[0]:
         return
@@ -371,12 +254,10 @@ def execute_network(all_mem, all_adj, all_acts, all_results):
     mem = all_mem[i]
     adj = all_adj[i]
     acts = all_acts[i]
-    # results = all_results[i]
+    results = all_results[i]
 
 
     feedForward(adj, acts, mem)
 
-    # for j in range(results.shape[0]):
-    #     results[j] = mem[-j - 1]
-
-        # return impl
+    for j in range(results.shape[0]):
+        results[j] = mem[-j - 1]
