@@ -541,7 +541,6 @@ class Genome:
 
     def createPhenotype(self) -> neat.phenotypes.Phenotype:
         from neat.phenotypes import SNeuron
-        phenotypeNeurons: List[SNeuron] = []
         phenoGraph = nx.DiGraph()
 
         queue: Queue = Queue()
@@ -560,7 +559,7 @@ class Genome:
             neuron: SNeuron = queue.get()
 
             # phenotypeNeurons.append(neuron)
-            phenoGraph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType)
+            phenoGraph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType, pos=(neuron.x, neuron.y))
 
             nodesVisited[neuron.ID] = neuron
 

@@ -48,11 +48,11 @@ class Population:
 
     def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):
     	
-    	genome = Genome(self.currentGenomeID, self.numOfInputs, self.numOfOutputs, self.innovations, neurons, links, parents)
-    	self.genomes.append(genome)
-    	self.currentGenomeID += 1
+        genome = Genome(self.currentGenomeID, self.numOfInputs, self.numOfOutputs, self.innovations, neurons, links, parents)
+        self.genomes.append(genome)
+        self.currentGenomeID += 1
 
-    	return genome
+        return genome
 
     def updatePopulation(self, update_data: PopulationUpdate) -> None:
         pass

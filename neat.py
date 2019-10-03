@@ -32,7 +32,6 @@ class NEAT:
         elif isinstance(self.population_configuration, SpeciesConfiguration):
             self.population = SpeciatedPopulation(population_configuration, self.innovations, mutation_rates)
 
-    # fitness: List[float], features: Optional[List[float]] = None
     def epoch(self, update: PopulationUpdate) -> List[Phenotype]:
         
         self.population.updatePopulation(update)

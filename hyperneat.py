@@ -9,6 +9,7 @@ from neat.population import PopulationUpdate, PopulationConfiguration
 from neat.genes import Genome, NeuronGene, MutationRates
 
 import networkx as nx
+from visualize import Visualize
 
 from itertools import groupby
 
@@ -29,7 +30,7 @@ class HyperNEAT(NEAT):
 
 
         # Substrate
-        hiddenLayersWidth: int = self.n_inputs/2
+        hiddenLayersWidth: int = self.n_inputs
 
         self.substrateNeurons: List[NeuronGene] = []
         for y in self.layers:
@@ -49,11 +50,9 @@ class HyperNEAT(NEAT):
 
         print("Nodes in substrate: {}".format(len(self.substrateNeurons)))
 
-        population_configuration._data["n_inputs"] = 4
-        population_configuration._data["n_outputs"] = 1
+        population_configuration._data["n_inputs"] = cppnInputs
+        population_configuration._data["n_outputs"] = cppnOutputs
         self.neat = NEAT(population_configuration, mutation_rates)
-
-        # FeedforwardCUDA
 
     def epoch(self, update_data: PopulationUpdate) -> List[Phenotype]:
         self.neat.population.updatePopulation(update_data)
@@ -77,10 +76,12 @@ class HyperNEAT(NEAT):
     def createSubstrate(self, cppn: Genome) -> Phenotype:
             
         cppnPheno = cppn.createPhenotype()
-        
+
+        # Visualize().update(cppnPheno)
+
         graph = nx.DiGraph()
         # graph.add_nodes_from([(n.ID,  {"activation": n.activation, "type": n.neuronType}) for n in self.substrateNeurons if n.neuronType != NeuronType.HIDDEN])
-        graph.add_nodes_from([(n.ID,  {"activation": n.activation, "type": n.neuronType}) for n in self.substrateNeurons])
+        graph.add_nodes_from([(n.ID,  {"activation": n.activation, "type": n.neuronType, "pos": (n.x, n.y)}) for n in self.substrateNeurons])
         
         paths = [list(nx.all_simple_paths(cppnPheno.graph, source=n[0], target=[o[0] for o in cppnPheno.out_nodes])) for n in cppnPheno.in_nodes]
         num_of_paths = len([p for p in paths if len(p) > 0])
@@ -88,8 +89,8 @@ class HyperNEAT(NEAT):
         if num_of_paths == 0:
             return Phenotype(graph, cppn.ID)
 
-        nrOfInputs = self.n_inputs
-        nrOfOutputs = self.n_outputs
+        # nrOfInputs = self.n_inputs
+        # nrOfOutputs = self.n_outputs
 
         layers = [list(g) for k, g in groupby(self.substrateNeurons, lambda n: n.y)]
 
@@ -101,7 +102,6 @@ class HyperNEAT(NEAT):
 
         for i in range(coordinates.shape[0] - 1):
             leftNeuronLayer = coordinates[i]
-            leftDepth = leftNeuronLayer[0].y
 
             X = np.array([(n.x, n.y) for n in leftNeuronLayer])
             X_IDs = np.array([n.ID for n in leftNeuronLayer])
@@ -109,29 +109,17 @@ class HyperNEAT(NEAT):
 
             for j in range(i+1, coordinates.shape[0]):
                 rightNeuronLayer = coordinates[j]
-                rightDepth = rightNeuronLayer[0].y
 
                 Y = np.array([(n.x, n.y) for n in rightNeuronLayer])
                 Y_IDs = np.array([n.ID for n in rightNeuronLayer])
                 Y_data = {"data": Y, "IDs": Y_IDs}
 
-                links = np.empty((X.shape[0], 3))
-
                 substrateCUDA = SubstrateCUDA(cppnPheno)
                 outputs = substrateCUDA.update(X_data, Y_data)
-                # print("outputs:", outputs)
-
-                nans = [l for l in outputs if l[2] == np.nan]
 
                 graph.add_weighted_edges_from(outputs)
 
-        # graph.add_weighted_edges_from(links)
-        isolated_hidden = [n for n in nx.isolates(graph) if graph.nodes[n]['type'] == NeuronType.HIDDEN]
-        # isolated_hidden = [graph.nodes[n] for n in nx.isolates(graph)]
-        # print(isolated_hidden)
-        graph.remove_nodes_from(isolated_hidden)
-
-        # print("Nodes in phenotype: {}".format(len(graph.nodes)))
-        # print("Edges in phenotype: {}".format(len(graph.edges)))
+        # isolated_hidden = [n for n in nx.isolates(graph) if graph.nodes[n]['type'] == NeuronType.HIDDEN]
+        # graph.remove_nodes_from(isolated_hidden)
 
         return Phenotype(graph, cppn.ID)
