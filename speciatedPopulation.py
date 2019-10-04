@@ -7,6 +7,7 @@ from neat.population import Population, PopulationConfiguration, PopulationUpdat
 
 import math
 import random
+from copy import deepcopy
 from icontract import require
 
 
@@ -127,9 +128,9 @@ class SpeciatedPopulation(Population):
             self.currentGenomeID += 1
 
         # Temp 
-        for g in self.genomes:
-            for _ in range(50):
-                g.mutate(mutationRates)
+        # for g in self.genomes:
+        #     for _ in range(50):
+        #         g.mutate(mutationRates)
 
         # self.speciate()
 
@@ -253,7 +254,8 @@ class SpeciatedPopulation(Population):
 
                 if (random.random() > self.mutationRates.crossoverRate):
                     member = random.choice(s.members)
-                    baby = fastCopy(member)
+                    # baby = fastCopy(member)
+                    baby = deepcopy(member)
                     baby.mutate(self.mutationRates)
                 else:
                     # Tournament selection

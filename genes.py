@@ -1,21 +1,20 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import List, Dict, Optional, Any
-
 from icontract import invariant, require
 
-from queue import Queue
 
 import random
+import itertools
+from queue import Queue
+from copy import  deepcopy
+
 
 import math
-from numba import jit
-
-from enum import Enum
-import itertools
-
 import numpy as np
 import networkx as nx
+from numba import jit
 
 import neat.phenotypes
 from neat.neatTypes import NeuronType
@@ -184,7 +183,7 @@ class Genome:
         self.outputs = outputs
         self.neurons: List[NeuronGene] = []
 
-        if len(neurons) == 0:
+        if len(self.neurons) == 0:
             for _ in range(self.inputs):
                 self._addNeuron(NeuronType.INPUT)
             for _ in range(self.outputs):
@@ -207,9 +206,12 @@ class Genome:
         return self.fitness < other.fitness
 
     def __deepcopy__(self, memodict={}):
-        copy_object = Genome(self.ID, deepcopy(self.neurons), deepcopy(self.links), self.parents)
+        copy_object = Genome(self.ID, self.inputs, self.outputs, self.innovations, self.neurons, self.links, self.parents)
         return copy_object
 
+    # @staticmethod
+    # def copy(other: Genome):
+    #     return Genome(other.ID, other.inputs, other.outputs, )
 
     def getLinksIn(self, neuron: NeuronGene) -> List[LinkGene]:
         return [l for l in self.links if l.toNeuron == neuron]

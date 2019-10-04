@@ -71,7 +71,7 @@ class Population:
             best = mum if mum.fitness > dad.fitness else dad
 
         # Copy input and output neurons
-        babyNeurons = [fastCopy(n) for n in best.neurons if (n.neuronType != phenos.NeuronType.HIDDEN)]
+        babyNeurons = [n for n in best.neurons if (n.neuronType != phenos.NeuronType.HIDDEN)]
 
         combinedIndexes = list(set(
             [l.ID for l in mum.links] + [l.ID for l in dad.links]))
@@ -88,11 +88,11 @@ class Population:
             
             if (mumLink is None):
                 if (dadLink is not None and best == dad):
-                    babyLinks.append(fastCopy(dadLink))
+                    babyLinks.append(dadLink)
 
             elif (dadLink is None):
                 if (mumLink is not None and best == mum):
-                    babyLinks.append(fastCopy(mumLink))
+                    babyLinks.append(mumLink)
 
             else:
                 babyLinks.append(random.choice([mumLink, dadLink]))
@@ -101,10 +101,10 @@ class Population:
         for link in babyLinks:
 
             if (link.fromNeuron.ID not in [n.ID for n in babyNeurons]):
-                babyNeurons.append(fastCopy(link.fromNeuron))
+                babyNeurons.append(link.fromNeuron)
 
             if (link.toNeuron.ID not in [n.ID for n in babyNeurons]):
-                babyNeurons.append(fastCopy(link.toNeuron))
+                babyNeurons.append(link.toNeuron)
 
         babyNeurons.sort(key=lambda x: x.y, reverse=False)
 
