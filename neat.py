@@ -2,7 +2,7 @@ from typing import List
 
 import neat.innovations
 from neat.phenotypes import Phenotype
-from neat.mapelites import MapElites, MapElitesConfiguration
+from neat.mapElites import MapElites, MapElitesConfiguration
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
 from neat.population import PopulationUpdate, PopulationConfiguration, Population
 from neat.genes import MutationRates, Phase, SpeciationType
