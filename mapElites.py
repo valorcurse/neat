@@ -55,14 +55,15 @@ class MapElites(Population):
 		archive_dim = tuple([configuration.mapResolution]*configuration.features)
 		self.archive = np.full(archive_dim, None, dtype=Genome)
 		self.performances = np.zeros(archive_dim)
-		self.archivedGenomes: List[Genome] = []
+		# self.archivedGenomes: List[Genome] = []
+		self.archivedGenomes: List[Genome] = self.randomInitialization()
 
 
 	def randomInitialization(self) -> List[Genome]:
 		randomPop: List[Genome] = []
 		for _ in range(100):
 			genome: Genome = self.newGenome()
-			for _ in range(50):
+			for _ in range(100):
 				genome.mutate(self.mutationRates)
 			randomPop.append(genome)
 
@@ -142,7 +143,7 @@ class MapElites(Population):
 			archivedPerformance = self.performances[tupleIndex]
 
 			if (fitness > archivedPerformance):
-				if archivedCandidate is not None:
+				if archivedCandidate is not None and archivedCandidate in self.archivedGenomes:
 					self.archivedGenomes.remove(archivedCandidate)
 				
 				self.archive[index] = candidate

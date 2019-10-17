@@ -13,6 +13,8 @@ import multiprocessing as mp
 # from pathos.multiprocessing import ProcessPool
 from joblib import Parallel, delayed
 
+import itertools
+
 import time
 
 
@@ -67,7 +69,6 @@ class Phenotype:
         self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
 
-        # self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
         self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
 
         self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
@@ -79,9 +80,6 @@ class FeedforwardCUDA(object):
 
 
     def __init__(self, phenotypes: List[Phenotype]):
-        self.kernel_spec = 'void(float32[:], float32[:])'
-        # self.cuda_kernels = [self.init_kernel(p) for p in phenotypes]
-
         self.threadsperblock = 32
         self.blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
 
@@ -89,79 +87,37 @@ class FeedforwardCUDA(object):
 
         self.num_of_outputs = len(self.phenotypes[0].out_nodes)
 
-    # def kernel_maker(self, adj_size, adj, acts):
-    #     def impl(X, results):
-    #         # i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    #         # i = cuda.grid(1)
-    #
-    #         mem = cuda.local.array(adj_size, dtype=float32)
-    #         for x_i in range(X.shape[0]):
-    #             x = X[x_i]
-    #             mem[x_i] = x
-    #
-    #         feedForward(adj, acts, mem)
-    #
-    #         for j in range(results.shape[0]):
-    #             results[j] = mem[-j - 1]
-    #
-    #     return impl
-
-    # def init_kernel(self, phenotype):
-    #     kernel_spec = self.kernel_maker(phenotype.adjacency_matrix.shape[0], phenotype.adjacency_matrix, phenotype.activations)
-    #
-    #     kernel = cuda.jit(self.kernel_spec)(kernel_spec)
-    #     kernel.total_size = phenotype.adjacency_matrix.shape[0] + phenotype.adjacency_matrix.size + phenotype.activations.size
-    #
-    #     return kernel
-
-
     def update(self, X):
-        largest_adj = max([p.adjacency_matrix.shape[0] for p in self.phenotypes])
-        # p.adjacency_matrix.shape[0]
-        # mem = np.array([np.zeros(p.adjacency_matrix.shape[0], dtype=np.float32) for p in self.phenotypes], dtype=object)
-        mem = np.array([np.zeros(p.adjacency_matrix.shape[0], dtype=np.float32) for p in self.phenotypes])
+        all_results = []
+        all_adjs = zip(np.array([p.adjacency_matrix for p in self.phenotypes]), X, self.phenotypes)
+        split_adjs = [list(g) for _, g in itertools.groupby(all_adjs, lambda a: a[0].shape)]
 
-        # mem = np.vstack([ma.zeros(largest_adj, dtype=np.float32, mask=np.zeros()) for p in self.phenotypes], dtype=object)
-        # print(mem)
-        # print(self)
-        # for p in self.phenotypes:
-        #     print("Adj:", p.adjacency_matrix.shape)
-        # print(X.shape, self.phenotypes[0].adjacency_matrix.shape[0], len(self.phenotypes))
-        # print("mem:", mem.shape, "X:", X.shape)
+        for adjs_inputs in split_adjs:
+            adjs = np.array([i[0] for i in adjs_inputs])
+            x = np.array([i[1] for i in adjs_inputs])
+            phenotypes = np.array([i[2] for i in adjs_inputs])
 
-        for row_i, row in enumerate(mem):
-            row[:X.shape[1]] = X[row_i]
-        # mem[:, :X.shape[0]] = X
 
-        # adjs = np.array([p.adjacency_matrix for p in self.phenotypes])
-        adjs = np.array([p.adjacency_matrix for p in self.phenotypes])
-        # acts = np.array([p.activations for p in self.phenotypes])
-        acts = np.array([p.activations for p in self.phenotypes])
-        results = np.array([np.empty(self.num_of_outputs, dtype=np.float32) for _ in self.phenotypes])
+            mem = np.array([np.zeros(adjs.shape[1], dtype=np.float32) for _ in adjs])
 
-        cuda_mem = cuda.to_device(mem)
-        cuda_adj = cuda.to_device(adjs)
-        cuda_acts = cuda.to_device(acts)
-        cuda_results = cuda.to_device(results)
+            # Copy inputs to mem
+            for row_i, row in enumerate(mem):
+            # for row_i, row in enumerate(x):
+                row[:x.shape[1]] = x[row_i]
 
-        # print(numba.typeof(cuda_mem), numba.typeof(cuda_adj), numba.typeof(cuda_acts))
-        # print([m.dtype for m in mem])
-        # print(numba.typeof(cuda_mem))
-        # print([adj.dtype for adj in adjs])
-        # print(numba.typeof(cuda_adj))
-        # print([c.dtype for c in acts])
-        # print(numba.typeof(cuda_acts))
-        # print([r.dtype for r in results])
-        # print(adjs)
-        execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_results)
-        # print(adjs)
-        results = cuda_results.copy_to_host()
+            acts = np.array([p.activations for p in phenotypes])
+            results = np.array([np.empty(self.num_of_outputs, dtype=np.float32) for _ in adjs])
 
-        # print(results)
-        # results = np.around(results, 2)
-        # print(results)
+            cuda_mem = cuda.to_device(mem)
+            cuda_adj = cuda.to_device(adjs)
+            cuda_acts = cuda.to_device(acts)
+            cuda_results = cuda.to_device(results)
 
-        return results
+            execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_results)
+            results = cuda_results.copy_to_host()
+            all_results.append(results)
+
+        return np.vstack(all_results)
 
 
 class SubstrateCUDA(object):
@@ -177,32 +133,11 @@ class SubstrateCUDA(object):
 
         self.batch_size = 10 * 10**7
 
-    def kernel_maker(self, size):
-        def impl(X, Y, adj, acts, start_index, results):
-            i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-            if i >= results.shape[0]:
-                return
-
-            mem = cuda.local.array(size, dtype=float32)
-
-            calculateLinks(X, Y, start_index, i, mem)
-            feedForward(adj, acts, mem)
-
-            results[i][0] = mem[-1]
-
-        return impl
-
     def update(self, X, Y):
 
         X_data = X["data"]
         Y_data = Y["data"]
 
-        # custom_sized_kernel = self.kernel_maker(self.adjacency_matrix.shape[0])
-        # calculateSubstrate = cuda.jit('void(float32[:,:], float32[:,:], float32[:,:], int64[:], int64, float32[:,:])')(custom_sized_kernel)
-        # calculateSubstrate = cuda.jit()(custom_sized_kernel)
-        # assert '.local' in calculateSubstrate.ptx
-
-        # num_of_nodes = self.adjacency_matrix.shape[0]
         cuda_adj = cuda.to_device(self.adjacency_matrix)
         cuda_acts = cuda.to_device(self.activations)
 
@@ -220,10 +155,9 @@ class SubstrateCUDA(object):
             results = np.empty((b_size, self.num_out_nodes))
             cuda_results = cuda.to_device(results)
 
-            # mem = np.array([np.zeros(p.adjacency_matrix.shape[0], dtype=np.float32) for p in self.phenotypes])
             mem = np.array([np.zeros(self.adjacency_matrix.shape[0], dtype=np.float32) for _ in range(len(X))])
 
-            calc_substrate[blockspergrid, threads_per_block](X_data, Y_data, cuda_adj, cuda_acts, start_index, mem, cuda_results)
+            calc_substrate[blockspergrid, threads_per_block](X_data, Y_data, cuda_adj, cuda_acts, mem, cuda_results)
 
             results = cuda_results.copy_to_host()
             results = np.around(results, 2)
@@ -248,10 +182,8 @@ class SubstrateCUDA(object):
 
 @cuda.jit(device=True)
 def feedForward(adj, acts, mem):
-    cuda_i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+    # cuda_i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     adj_t = adj.T
-
-    # print(mem, adj_t)
 
     for m_i in range(mem.shape[0]):
         m = mem[m_i]
@@ -268,7 +200,6 @@ def feedForward(adj, acts, mem):
                 if m_2 == 0:
                     continue
 
-                # print(m_2, j)
                 added += m_2*j
 
         function = acts[m_i]
@@ -278,39 +209,9 @@ def feedForward(adj, acts, mem):
             mem[m_i] += math.sin(added)
         elif function == 2:
             mem[m_i] += math.cos(added)
-        # print(added)
-
-    # for col_i in range(adj_t.shape[0]):
-    #     weights = adj_t[col_i].T
-    #
-    #     result = 0.0
-    #     for i in mem:
-    #         if i == 0.0:
-    #             continue
-    #
-    #         added = 0.0
-    #         for j in weights:
-    #             if j == 0.0:
-    #                 continue
-    #
-    #             added += i*j
-    #             # print(cuda_i, i, j, added)
-    #         result += added
-    #
-    #     # print("result", result)
-    #     function = acts[col_i]
-    #     if function == 0:
-    #         mem[col_i] += math.tanh(result)
-    #     elif function == 1:
-    #         mem[col_i] += math.sin(result)
-    #     elif function == 2:
-    #         mem[col_i] += math.cos(result)
-
-    # print(cuda_i, "feedforward", mem)
-    # print(col_i, mem[col_i])
 
 @cuda.jit()
-def calc_substrate(X, Y, adj, acts, start_index, mems, results):
+def calc_substrate(X, Y, adj, acts, mems, results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     if i >= results.shape[0]:
         return
@@ -359,9 +260,6 @@ def execute_network(all_mem, all_adj, all_acts, all_results):
     acts = all_acts[i]
     results = all_results[i]
 
-
-    # print("execute_network")
-    # print(i, "execute_network", mem)
     feedForward(adj, acts, mem)
 
     for j in range(results.shape[0]):
