@@ -136,7 +136,6 @@ class SpeciatedPopulation(Population):
 
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
-        print(len(update.fitness), len(self.genomes))
         # Set fitness score to their respective genome
         for index, genome in enumerate(self.genomes):
             genome.fitness = update.fitness[index]

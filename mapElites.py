@@ -50,13 +50,15 @@ class MapElites(Population):
 		self.inputs = self.configuration.n_inputs
 		self.outputs = self.configuration.n_outputs
 
-		# self.archive = np.full((configuration.features, configuration.mapResolution), None, dtype=Genome)
-		# self.performances = np.zeros((configuration.features, configuration.mapResolution))
 		archive_dim = tuple([configuration.mapResolution]*configuration.features)
-		self.archive = np.full(archive_dim, None, dtype=Genome)
-		self.performances = np.zeros(archive_dim)
-		# self.archivedGenomes: List[Genome] = []
-		self.archivedGenomes: List[Genome] = self.randomInitialization()
+		print("Map elites archive size: {}".format(pow(configuration.mapResolution, configuration.features)))
+		# self.archive = np.full(archive_dim, None, dtype=Genome)
+		self.archive = {}
+		self.archivedFeatures = {}
+		# self.performances = np.zeros(archive_dim)
+		self.performances = {}
+		self.archivedGenomes: List[Genome] = []
+		# self.archivedGenomes: List[Genome] = self.randomInitialization()
 
 
 	def randomInitialization(self) -> List[Genome]:
@@ -117,39 +119,45 @@ class MapElites(Population):
 			feature = features[candidate_i]
 			fitness = fitnesses[candidate_i]
 			# for idx, feature in enumerate(features):
-				# archiveFeature = self.configuration.features[idx]
+			# archiveFeature = self.configuration.features[idx]
 
-				# if feature < archiveFeature.min:
-				# 	archiveFeature.min = feature
-				# elif feature > archiveFeature.max:
-				# 	archiveFeature.max = feature
+			# if feature < archiveFeature.min:
+			# 	archiveFeature.min = feature
+			# elif feature > archiveFeature.max:
+			# 	archiveFeature.max = feature
 
-				# print("(%f - %f)/(%f - %f))"%(archiveFeature.max, feature, archiveFeature.max, archiveFeature.min))
+			# print("(%f - %f)/(%f - %f))"%(archiveFeature.max, feature, archiveFeature.max, archiveFeature.min))
 
-				# relativePosition: float = (archiveFeature.max - feature)/(archiveFeature.max - archiveFeature.min)
-				# relativePosition: float =  (1.0 - feature)/(1.0 -- 1.0)
-				# relativePosition: float =  (1.0 + feature)/2.0
-				# index = relativePosition * self.configuration.mapResolution
-				# index = max(0, index - 1)
-				# index = np.clip(0, index - 1, self.configuration.mapResolution)
-				# featuresIndexes.append(index)
+			# relativePosition: float = (archiveFeature.max - feature)/(archiveFeature.max - archiveFeature.min)
+			# relativePosition: float =  (1.0 - feature)/(1.0 -- 1.0)
+			# relativePosition: float =  (1.0 + feature)/2.0
+			# index = relativePosition * self.configuration.mapResolution
+			# index = max(0, index - 1)
+			# index = np.clip(0, index - 1, self.configuration.mapResolution)
+			# featuresIndexes.append(index)
 
 			relativePosition: float = (1.0 + feature) / 2.0
 			index = relativePosition * self.configuration.mapResolution
 			index = np.clip(0, index - 1, self.configuration.mapResolution).astype(np.int)
-
 			tupleIndex = tuple(index)
-			archivedCandidate = self.archive[tupleIndex]
-			archivedPerformance = self.performances[tupleIndex]
 
-			if (fitness > archivedPerformance):
-				if archivedCandidate is not None and archivedCandidate in self.archivedGenomes:
-					self.archivedGenomes.remove(archivedCandidate)
-				
-				self.archive[index] = candidate
-				self.archivedGenomes.append(candidate)
+			if tupleIndex in self.archive:
 
-				self.performances[index] = fitness
+				archivedCandidate = self.archive[tupleIndex]
+				# archivedPerformance = self.performances[tupleIndex] if tupleIndex in self.performances else 0.0
+
+				if (fitness > archivedCandidate["fitness"]):
+					if archivedCandidate["genome"] in self.archivedGenomes:
+						self.archivedGenomes.remove(archivedCandidate["genome"])
+
+					self.archive[tupleIndex] = {"genome": candidate, "fitness": fitness}
+					# self.archivedFeatures[tupleIndex] = feature
+					self.archivedGenomes.append(candidate)
+					# self.performances[tupleIndex] = fitness
+
+			else:
+				self.archive[tupleIndex] = {"genome": candidate, "fitness": fitness}
+				# self.performances[tupleIndex] = fitness
 
 		# possibleCandidates = self.archive[self.archive != None]
 		# total = pow(self.configuration.mapResolution, len(self.configuration.features))
