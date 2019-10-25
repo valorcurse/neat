@@ -52,7 +52,7 @@ class MutationRates:
     def __init__(self) -> None:
         self.crossoverRate = 0.7
 
-        self.newSpeciesTolerance = 2.0
+        self.newSpeciesTolerance = 3.0
 
         self.chanceToMutateBias = 0.7
 
@@ -391,7 +391,7 @@ class Genome:
 
 
         notHidden = [n for n in self.neurons if n.neuronType != NeuronType.HIDDEN]
-        ID = self.innovations.createNewNeuronInnovation(neuronType, fromID, toID)
+        ID = len(notHidden) if notHidden else self.innovations.createNewNeuronInnovation(neuronType, fromID, toID)
         newNeuron = NeuronGene(neuronType, ID, y)
 
         # newNeuron = innovations.createNewNeuron(y, neuronType, fromNeuron, toNeuron)
@@ -427,7 +427,7 @@ class Genome:
 
         newNeuron = self._addNeuron(NeuronType.HIDDEN, fromNeuron, toNeuron)
 
-        self.addLink(fromNeuron, newNeuron)
+        self.addLink(fromNeuron, newNeuron, originalWeight)
         self.addLink(newNeuron, toNeuron)
 
         chosenLink.enabled = False
@@ -583,6 +583,7 @@ class Genome:
 
         # print(phenoGraph.nodes.data())
         # print("outputs: ", len([n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]), len([n for n,d in phenoGraph.out_degree() if d == 0]))
-
-        return neat.phenotypes.Phenotype(phenoGraph, self.ID)
+        phenotype = neat.phenotypes.Phenotype(phenoGraph, self.ID)
+        phenotype.genome = self
+        return phenotype
 

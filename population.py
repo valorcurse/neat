@@ -46,6 +46,9 @@ class Population:
     #         genome = self.newGenome(neurons, links)
     #         genome.parents = [genome]
 
+    def population(self):
+        pass
+
     def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):
     	
         genome = Genome(self.currentGenomeID, self.numOfInputs, self.numOfOutputs, self.innovations, neurons, links, parents)

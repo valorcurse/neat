@@ -102,7 +102,6 @@ class FeedforwardCUDA(object):
 
             # Copy inputs to mem
             for row_i, row in enumerate(mem):
-            # for row_i, row in enumerate(x):
                 row[:x.shape[1]] = x[row_i]
 
             acts = np.array([p.activations for p in phenotypes])
@@ -251,7 +250,7 @@ def calculateLinks(X, Y, start_index, i, mem):
 @cuda.jit()
 def execute_network(all_mem, all_adj, all_acts, all_results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-
+    # print(i)
     if i >= all_mem.shape[0]:
         return
 
@@ -260,7 +259,9 @@ def execute_network(all_mem, all_adj, all_acts, all_results):
     acts = all_acts[i]
     results = all_results[i]
 
+    # print("Mem before: {}".format(mem))
     feedForward(adj, acts, mem)
+    # print("Mem After: {}".format(mem))
 
     for j in range(results.shape[0]):
         results[j] = mem[-j - 1]

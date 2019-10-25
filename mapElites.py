@@ -7,6 +7,7 @@ from neat.population import Population, PopulationConfiguration, PopulationUpdat
 
 import random
 import numpy as np
+from scipy import spatial
 from icontract import require
 
 
@@ -18,10 +19,10 @@ class Feature:
 		self.max = maximum
 
 class MapElitesConfiguration(PopulationConfiguration):
-	def __init__(self, mapResolution: int, batch_size: int, features: int, n_inputs: int, n_outputs: int):
+	def __init__(self, mapResolution: int, pop_size: int, features: int, n_inputs: int, n_outputs: int):
 		self._data = {
 			"mapResolution": mapResolution,
-			"batch_size": batch_size,
+			"pop_size": pop_size,
 			"features": features,
 			"n_inputs": n_inputs,
 			"n_outputs": n_outputs
@@ -71,6 +72,9 @@ class MapElites(Population):
 
 		return randomPop
 
+	def population(self):
+		return self.archive.values()
+
 	def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):				
 		genome = Genome(self.currentGenomeID, self.inputs, self.outputs, self.innovations, neurons, links, parents)
 		self.currentGenomeID += 1
@@ -89,8 +93,9 @@ class MapElites(Population):
 
 
 		babies = []
-		for _ in range(self.configuration.batch_size):
-			member = random.choice(self.archivedGenomes)
+		for _ in range(self.configuration.pop_size):
+			archived_member = random.choice(self.archive)
+			member = archived_member['genome']
 
 			baby: Optional[Genome] = None
 			if (random.random() > self.mutationRates.crossoverRate):
@@ -98,8 +103,14 @@ class MapElites(Population):
 				baby.mutate(self.mutationRates)
 
 			else:
-				otherMember = random.choice(self.archivedGenomes)
-				baby = self.crossover(member, otherMember)
+				kdtree = spatial.cKDTree(self.archive.keys())
+				neighbours = kdtree.query(archived_member)
+
+				# otherMember = random.choice(self.archivedGenomes)
+				otherMember = random.choice(neighbours)
+				other_genome = self.archive[otherMember]
+
+				baby = self.crossover(member, other_genome)
 
 			babies.append(baby)
 
@@ -115,26 +126,10 @@ class MapElites(Population):
 	def updateArchive(self, fitnesses: List[float], features) -> None:
 
 		for candidate_i, candidate in enumerate(self.genomes):
-			# featuresIndexes = []
+
 			feature = features[candidate_i]
 			fitness = fitnesses[candidate_i]
-			# for idx, feature in enumerate(features):
-			# archiveFeature = self.configuration.features[idx]
 
-			# if feature < archiveFeature.min:
-			# 	archiveFeature.min = feature
-			# elif feature > archiveFeature.max:
-			# 	archiveFeature.max = feature
-
-			# print("(%f - %f)/(%f - %f))"%(archiveFeature.max, feature, archiveFeature.max, archiveFeature.min))
-
-			# relativePosition: float = (archiveFeature.max - feature)/(archiveFeature.max - archiveFeature.min)
-			# relativePosition: float =  (1.0 - feature)/(1.0 -- 1.0)
-			# relativePosition: float =  (1.0 + feature)/2.0
-			# index = relativePosition * self.configuration.mapResolution
-			# index = max(0, index - 1)
-			# index = np.clip(0, index - 1, self.configuration.mapResolution)
-			# featuresIndexes.append(index)
 
 			relativePosition: float = (1.0 + feature) / 2.0
 			index = relativePosition * self.configuration.mapResolution
@@ -144,24 +139,14 @@ class MapElites(Population):
 			if tupleIndex in self.archive:
 
 				archivedCandidate = self.archive[tupleIndex]
-				# archivedPerformance = self.performances[tupleIndex] if tupleIndex in self.performances else 0.0
 
 				if (fitness > archivedCandidate["fitness"]):
 					if archivedCandidate["genome"] in self.archivedGenomes:
 						self.archivedGenomes.remove(archivedCandidate["genome"])
 
 					self.archive[tupleIndex] = {"genome": candidate, "fitness": fitness}
-					# self.archivedFeatures[tupleIndex] = feature
 					self.archivedGenomes.append(candidate)
-					# self.performances[tupleIndex] = fitness
+					self.archivedGenomes = sorted(self.archivedGenomes, key=lambda a: a['fitness'])
 
 			else:
 				self.archive[tupleIndex] = {"genome": candidate, "fitness": fitness}
-				# self.performances[tupleIndex] = fitness
-
-		# possibleCandidates = self.archive[self.archive != None]
-		# total = pow(self.configuration.mapResolution, len(self.configuration.features))
-		# print("Archive: %d/%d"%(len(possibleCandidates), total))
-
-
-

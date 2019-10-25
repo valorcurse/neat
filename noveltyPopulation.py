@@ -12,7 +12,7 @@ from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, 
 from neat.population import PopulationUpdate
 
 class NoveltyUpdate(SpeciesUpdate):
-    def __init__(self, behaviors, fitness: List[float]):
+    def __init__(self, behaviors, fitness: np.ndarray):
         super().__init__(fitness)
 
         self._data["behaviors"] = behaviors

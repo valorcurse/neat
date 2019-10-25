@@ -7,6 +7,7 @@ from neat.population import Population, PopulationConfiguration, PopulationUpdat
 
 import math
 import random
+import numpy as np
 from copy import deepcopy
 from icontract import require
 
@@ -96,7 +97,9 @@ class SpeciesConfiguration(PopulationConfiguration):
 
 
 class SpeciesUpdate(PopulationUpdate):
-    def __init__(self, fitness: List[float]):
+    def __init__(self, fitness: np.ndarray):
+        super().__init__()
+
         self._data = {
             "fitness": fitness
         }
@@ -128,11 +131,17 @@ class SpeciatedPopulation(Population):
             self.currentGenomeID += 1
 
         # Temp 
-        # for g in self.genomes:
-        #     for _ in range(50):
-        #         g.mutate(mutationRates)
+        for g in self.genomes:
+            for _ in range(50):
+                g.mutate(mutationRates)
 
         # self.speciate()
+
+    def __len__(self):
+        return len(self.genomes)
+
+    def population_and_fitnesses(self):
+        return [{"genome": g, "fitness": g.fitness} for g in self.genomes]
 
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
@@ -224,9 +233,9 @@ class SpeciatedPopulation(Population):
 
                 totalDistance += s.leader.calculateCompatibilityDistance(randomSpecies.leader)
             
-            self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
+            # self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
 
-            print("averageInterspeciesDistance: " + str(self.averageInterspeciesDistance))
+            # print("averageInterspeciesDistance: " + str(self.averageInterspeciesDistance))
 
     def newGeneration(self) -> None:
 
@@ -235,7 +244,6 @@ class SpeciatedPopulation(Population):
             s.members.sort(reverse=True, key=lambda x: x.fitness)
 
             topPercent = int(math.ceil(0.01 * len(s.members)))
-            print("topPercent: " + str(topPercent))
             # Grabbing the top 2 performing genomes
             for topMember in s.members[:topPercent]:
                 newPop.append(topMember)
