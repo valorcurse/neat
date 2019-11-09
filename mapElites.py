@@ -61,6 +61,9 @@ class MapElites(Population):
 		self.archivedGenomes: List[Genome] = []
 		# self.archivedGenomes: List[Genome] = self.randomInitialization()
 
+	def __len__(self):
+		return len(self.archivedGenomes)
+
 
 	def randomInitialization(self) -> List[Genome]:
 		randomPop: List[Genome] = []
@@ -72,8 +75,11 @@ class MapElites(Population):
 
 		return randomPop
 
-	def population(self):
+	def population_and_fitnesses(self):
 		return self.archive.values()
+
+	def population(self):
+		return [g['genome'] for g in self.archive.values()]
 
 	def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):				
 		genome = Genome(self.currentGenomeID, self.inputs, self.outputs, self.innovations, neurons, links, parents)
@@ -94,8 +100,7 @@ class MapElites(Population):
 
 		babies = []
 		for _ in range(self.configuration.pop_size):
-			archived_member = random.choice(self.archive)
-			member = archived_member['genome']
+			member = random.choice(self.archivedGenomes)
 
 			baby: Optional[Genome] = None
 			if (random.random() > self.mutationRates.crossoverRate):
@@ -103,14 +108,9 @@ class MapElites(Population):
 				baby.mutate(self.mutationRates)
 
 			else:
-				kdtree = spatial.cKDTree(self.archive.keys())
-				neighbours = kdtree.query(archived_member)
+				otherMember = random.choice(self.archivedGenomes)
 
-				# otherMember = random.choice(self.archivedGenomes)
-				otherMember = random.choice(neighbours)
-				other_genome = self.archive[otherMember]
-
-				baby = self.crossover(member, other_genome)
+				baby = self.crossover(member, otherMember)
 
 			babies.append(baby)
 
@@ -146,7 +146,7 @@ class MapElites(Population):
 
 					self.archive[tupleIndex] = {"genome": candidate, "fitness": fitness}
 					self.archivedGenomes.append(candidate)
-					self.archivedGenomes = sorted(self.archivedGenomes, key=lambda a: a['fitness'])
+					# self.archivedGenomes = sorted(self.archivedGenomes, key=lambda a: a['fitness'])
 
 			else:
 				self.archive[tupleIndex] = {"genome": candidate, "fitness": fitness}

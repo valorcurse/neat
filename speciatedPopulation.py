@@ -131,9 +131,9 @@ class SpeciatedPopulation(Population):
             self.currentGenomeID += 1
 
         # Temp 
-        for g in self.genomes:
-            for _ in range(50):
-                g.mutate(mutationRates)
+        # for g in self.genomes:
+        #     for _ in range(50):
+        #         g.mutate(mutationRates)
 
         # self.speciate()
 
@@ -233,7 +233,7 @@ class SpeciatedPopulation(Population):
 
                 totalDistance += s.leader.calculateCompatibilityDistance(randomSpecies.leader)
             
-            # self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
+            self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
 
             # print("averageInterspeciesDistance: " + str(self.averageInterspeciesDistance))
 
@@ -281,7 +281,6 @@ class SpeciatedPopulation(Population):
 
     def reproduce(self) -> List[genes.Genome]:
         
-        # if len(self.species) > 0:    
         self.generation += 1
 
         self.calculateSpawnAmount()

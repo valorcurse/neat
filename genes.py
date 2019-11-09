@@ -50,7 +50,7 @@ class FuncsEnum(Enum):
 
 class MutationRates:
     def __init__(self) -> None:
-        self.crossoverRate = 0.7
+        self.crossoverRate = 0.3
 
         self.newSpeciesTolerance = 3.0
 

@@ -2,7 +2,7 @@ from typing import List, Dict, Optional
 
 import random
 
-from neat.utils import fastCopy
+from neat.phenotypes import Phenotype
 from neat.innovations import Innovations
 from neat.genes import Genome, LinkGene, NeuronGene, MutationRates
 import neat.phenotypes as phenos
@@ -113,6 +113,12 @@ class Population:
 
         return self.newGenome(babyNeurons, babyLinks, [mum, dad])
 
+
+    def create_phenotypes(self) -> List[Phenotype]:
+        return [g.createPhenotype() for  g in self.genomes]
+
+    def refine_behaviors(self, eval_env):
+        pass
 
     def reproduce(self) -> List:
         pass
