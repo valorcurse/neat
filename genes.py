@@ -167,8 +167,8 @@ class LinkGene:
 
 
 
-@invariant(lambda self: len([n for n in self.neurons if n.neuronType == NeuronType.INPUT]) == self.inputs, ValueError("Number of INPUT neurons incorrect."))
-@invariant(lambda self: len([n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]) == self.outputs, ValueError("Number of OUTPUT neurons incorrect."))
+# @invariant(lambda self: len([n for n in self.neurons if n.neuronType == NeuronType.INPUT]) == self.inputs, ValueError("Number of INPUT neurons incorrect."))
+# @invariant(lambda self: len([n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]) == self.outputs, ValueError("Number of OUTPUT neurons incorrect."))
 class Genome:
 
     def __init__(self, ID: int, inputs: int, outputs: int, innovations: Innovations = DummyInnovations(), neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents: List[Genome]=[]) -> None:

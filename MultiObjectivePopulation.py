@@ -53,25 +53,34 @@ class MOPopulation(SpeciatedPopulation):
         novelties = self.novelty_map.calculate_novelty(features)
         ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=zip(update.fitness, novelties))
 
-        self.novelty_map += features
-
         # ndf = np.array(ndf).flatten()[::-1]
+
+        position_fitnesses = [-f for f in np.array(np.hstack(ndf), dtype=np.int32)]
+
+        # print(position_fitnesses)
+
+        # for g, f in zip(self.genomes, position_fitnesses):
+        #     g.fitness = f
+
+        # update.fitness = -dc.astype(np.int32)
+
+        self.genomes = [self.genomes[i] for i in ndf[0]]
 
         super().updatePopulation(update)
 
         self.epochs += 1
 
     def refine_behaviors(self, eval_env: Evaluation):
-        sorted_archive = sorted(self.population_and_fitnesses(), key=lambda a: a['fitness'])
-        ten_percent = max(1, int(len(sorted_archive) * 0.1))
-        self.genomes = [a['genome'] for a in sorted_archive[:ten_percent]]
+        # sorted_archive = sorted(self.population_and_fitnesses(), key=lambda a: a['fitness'])
+        # ten_percent = max(1, int(len(sorted_archive) * 0.1))
+        # self.genomes = [a['genome'] for a in sorted_archive[:ten_percent]]
 
         phenotypes = self.create_phenotypes()
         print("Refining AURORA...")
         self.aurora.refine(phenotypes, eval_env)
         print("Done.")
 
-        states, _ = eval_env.evaluate(phenotypes)
+        _, states = eval_env.evaluate(phenotypes)
         print("Re-characterizing archived genomes...")
         features = self.aurora.characterize(states)
         print("Done.")

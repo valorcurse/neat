@@ -1,3 +1,5 @@
+from icontract import require, ensure
+
 from neat.evaluation import Evaluation
 
 class Aurora:
@@ -16,21 +18,24 @@ class Aurora:
         sess = tf.Session(config=config)
         set_session(sess)  # set this TensorFlow session as the default session for Keras
 
+        self.inputs_dim = inputs_dim
+        self.encoding_dim = encoding_dim
+
         # this is our input placeholder
-        input_img = Input(shape=(inputs_dim,))
+        input_img = Input(shape=(self.inputs_dim,))
         # "encoded" is the encoded representation of the input
-        encoded = Dense(encoding_dim, activation='sigmoid')(input_img)
+        encoded = Dense(self.encoding_dim, activation='sigmoid')(input_img)
         # "decoded" is the lossy reconstruction of the input
-        decoded = Dense(inputs_dim, activation='relu')(encoded)
+        decoded = Dense(self.inputs_dim, activation='relu')(encoded)
 
         # this model maps an input to its reconstruction
         self.autoencoder = Model(input_img, decoded)
 
         # this model maps an input to its encoded representation
-        encoder = Model(input_img, encoded)
+        self.encoder = Model(input_img, encoded)
 
         # create a placeholder for an encoded (32-dimensional) input
-        encoded_input = Input(shape=(encoding_dim,))
+        encoded_input = Input(shape=(self.encoding_dim,))
         # retrieve the last layer of the autoencoder model
         decoder_layer = self.autoencoder.layers[-1]
         # create the decoder model
@@ -67,4 +72,12 @@ class Aurora:
             print("Training autoencoder. Loss: {}".format(loss))
 
     def characterize(self, features):
-        return self.autoencoder.predict(features)
+        assert features.shape[1] == self.inputs_dim, \
+            "Size of features {} was not equal to size of autoencoder {}".format(features.shape[1], self.inputs_dim)
+
+        prediction = self.encoder.predict(features)
+
+        assert prediction.shape[1] == self.encoding_dim, \
+            "Size of encoded feature {} was not the correct size of {}".format(prediction.shape[1], self.encoding_dim)
+
+        return prediction
