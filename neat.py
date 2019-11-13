@@ -10,7 +10,7 @@ from neat.genes import MutationRates, Phase, SpeciationType
 
 from neat.mapElites import MapElites, MapElitesConfiguration
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
-from neat.MultiObjectivePopulation import MOConfiguration, MOPopulation, MOUpdate
+from neat.multiobjectivePopulation import MOConfiguration, MOPopulation, MOUpdate
 from neat.population import PopulationConfiguration, Population
 
 class NEAT:
@@ -28,7 +28,8 @@ class NEAT:
 
         self.milestone: float = 0.01
         self.epochs = -1
-        self.refinement_epoch = 50
+        # self.refinement_epoch = 50
+        self.refinement_epochs = [0, 50, 150, 350, 750, 1550]
 
         # If using MapElites
         if isinstance(self.population_configuration, MapElitesConfiguration):
@@ -61,13 +62,14 @@ class NEAT:
         while True:
             self.epochs += 1
 
-            if self.epochs == 0 or self.epochs % self.refinement_epoch == 0:
+            if self.epochs in self.refinement_epochs:
                 self.population.refine_behaviors(self.eval_env)
 
-            self.population.reproduce()
             phenotypes = self.population.create_phenotypes()
             states, fitnesses = self.evaluate_vectorized(phenotypes)
+            print("Fitnesses: {}".format(fitnesses))
 
             self.population.updatePopulation(MOUpdate(states, fitnesses))
+            self.population.reproduce()
 
             yield

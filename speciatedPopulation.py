@@ -13,7 +13,7 @@ from icontract import require
 
 
 class Species:
-    numGensAllowNoImprovement = 20
+    numGensAllowNoImprovement = 50
 
     def __init__(self, speciesID: int, leader: genes.Genome):
         self.ID: int = speciesID
@@ -159,13 +159,17 @@ class SpeciatedPopulation(Population):
         
         for s in self.species:
             s.adjustFitnesses()
-        
+
+        # equal_portion = 0.8
+        equal_portion = int(self.population_size*0.8)
+        equal_amount = int(equal_portion/len(self.species))
+        merit_portion = self.population_size - equal_portion
         allFitnesses = sum([m.adjustedFitness for spc in self.species for m in spc.members])
         for s in self.species:
             sumOfFitnesses: float = sum([m.adjustedFitness for m in s.members])
 
             portionOfFitness: float = 1.0 if allFitnesses == 0.0 and sumOfFitnesses == 0.0 else sumOfFitnesses/allFitnesses
-            s.numToSpawn = int(self.population_size * portionOfFitness)
+            s.numToSpawn = equal_amount +  int(merit_portion * portionOfFitness)
 
     def speciate(self) -> None:
 
@@ -241,22 +245,23 @@ class SpeciatedPopulation(Population):
 
         newPop = []
         for s in self.species:
-            s.members.sort(reverse=True, key=lambda x: x.fitness)
+            # s.members.sort(reverse=True, key=lambda x: x.fitness)
 
-            topPercent = int(math.ceil(0.01 * len(s.members)))
+            newPop.extend(s.members)
+
+            # topPercent = int(math.ceil(0.01 * len(s.members)))
             # Grabbing the top 2 performing genomes
-            for topMember in s.members[:topPercent]:
-                newPop.append(topMember)
-                # s.members.remove(topMember)
-                s.numToSpawn -= 1
+            # for topMember in s.members[:topPercent]:
+            #     newPop.append(topMember)
+            #     s.numToSpawn -= 1
 
             # Only use the survival threshold fraction to use as parents for the next generation.
-            cutoff = int(math.ceil(0.1 * len(s.members)))
+            # cutoff = int(math.ceil(0.1 * len(s.members)))
             # Use at least two parents no matter what the threshold fraction result is.
-            cutoff = max(cutoff, 2)
-            s.members = s.members[:cutoff]
+            # cutoff = max(cutoff, 2)
+            # s.members = s.members[:cutoff]
 
-            for i in range(s.numToSpawn):
+            for i in range(s.numToSpawn - len(s.members)):
                 baby: genes.Genome = None
 
                 if (random.random() > self.mutationRates.crossoverRate):

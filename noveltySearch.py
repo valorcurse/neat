@@ -8,7 +8,7 @@ class NoveltySearch:
         self.novelty_map = np.empty((1, self.num_of_behaviors))
         # Sparseness threshold as percentage of farthest distance between 2 points
         # p_threshold: float = farthestDistance*0.03
-        self.p_threshold: float = 0.05
+        self.p_threshold: float = 0.01
         self.k = 10 # Nr of neighbors to compare to
 
     def calculate_novelty(self, behaviors) -> np.ndarray:

@@ -1,22 +1,26 @@
 from icontract import require, ensure
 
 from neat.evaluation import Evaluation
-
 class Aurora:
 
     def __init__(self, encoding_dim, inputs_dim):
-
         import keras
-        from keras.layers import Input, Dense
-        from keras.models import Model
-        from keras.backend.tensorflow_backend import set_session
+        from tensorflow.keras.layers import Input, Dense
+        from tensorflow.keras.models import Model
         import tensorflow as tf
 
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-        config.log_device_placement = True  # to log device placement (on which device the operation ran)
-        sess = tf.Session(config=config)
-        set_session(sess)  # set this TensorFlow session as the default session for Keras
+
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        if gpus:
+            try:
+                # Currently, memory growth needs to be the same across GPUs
+                for gpu in gpus:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+                logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+                print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+            except RuntimeError as e:
+                # Memory growth must be set before GPUs have been initialized
+                print(e)
 
         self.inputs_dim = inputs_dim
         self.encoding_dim = encoding_dim
@@ -75,7 +79,7 @@ class Aurora:
         assert features.shape[1] == self.inputs_dim, \
             "Size of features {} was not equal to size of autoencoder {}".format(features.shape[1], self.inputs_dim)
 
-        prediction = self.encoder.predict(features)
+        prediction = self.encoder.predict(features, verbose=0)
 
         assert prediction.shape[1] == self.encoding_dim, \
             "Size of encoded feature {} was not the correct size of {}".format(prediction.shape[1], self.encoding_dim)

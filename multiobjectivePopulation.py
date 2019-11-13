@@ -41,7 +41,6 @@ class MOPopulation(SpeciatedPopulation):
 
         # Temp way to trigger aurora refinement
         self.epochs = 0
-        self.max_epochs = 50
         self.aurora = Aurora(encoding_dim, behavior_matrix_size)
 
         self.novelty_map = NoveltySearch(encoding_dim)
@@ -51,30 +50,34 @@ class MOPopulation(SpeciatedPopulation):
 
         features = self.aurora.characterize(update.behaviors)
         novelties = self.novelty_map.calculate_novelty(features)
-        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=zip(update.fitness, novelties))
+        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=zip(-update.fitness, -novelties))
 
-        # ndf = np.array(ndf).flatten()[::-1]
+        nd_genomes = []
+        space_to_fill = int(self.population_size/2)
+        space_left = space_to_fill
+        i = 0
+        while(space_left > 0):
+            non_dominated = [self.genomes[i] for i in ndf[i]]
+            space_left = max(0, space_left - len(nd_genomes))
+            genomes_to_take = min(len(non_dominated), space_left)
+            nd_genomes.extend(non_dominated[:genomes_to_take])
 
-        position_fitnesses = [-f for f in np.array(np.hstack(ndf), dtype=np.int32)]
+            i += 1
 
-        # print(position_fitnesses)
+        self.genomes = nd_genomes
+        self.speciate()
 
-        # for g, f in zip(self.genomes, position_fitnesses):
-        #     g.fitness = f
-
-        # update.fitness = -dc.astype(np.int32)
-
-        self.genomes = [self.genomes[i] for i in ndf[0]]
+        # nd_indexes = np.array(ndf[:i]).flatten()
+        nd_indexes = [a for l in ndf[:i] for a in l]
+        update.fitness = np.array([update.fitness[i] for i in nd_indexes], dtype=np.float32)
+        update.behaviors = np.array([update.behaviors[i] for i in nd_indexes], dtype=np.float32)
 
         super().updatePopulation(update)
 
         self.epochs += 1
 
-    def refine_behaviors(self, eval_env: Evaluation):
-        # sorted_archive = sorted(self.population_and_fitnesses(), key=lambda a: a['fitness'])
-        # ten_percent = max(1, int(len(sorted_archive) * 0.1))
-        # self.genomes = [a['genome'] for a in sorted_archive[:ten_percent]]
 
+    def refine_behaviors(self, eval_env: Evaluation):
         phenotypes = self.create_phenotypes()
         print("Refining AURORA...")
         self.aurora.refine(phenotypes, eval_env)

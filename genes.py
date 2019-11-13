@@ -191,14 +191,14 @@ class Genome:
         else:
             self.neurons = fastCopy(neurons)
 
-        self.fitness: float = 0.0
-        self.adjustedFitness: float = 0.0
-        self.novelty: float = 0.0
+        self.fitness: float = -1000.0
+        self.adjustedFitness: float = -1000.0
+        self.novelty: float = -1000.0
         
-        self.milestone: float = 0.0
+        self.milestone: float = -1000.0
 
         # For printing
-        self.distance: float = 0.0
+        self.distance: float = -1000.0
         
         self.species: Optional[Species] = None
 
