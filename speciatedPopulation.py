@@ -237,7 +237,7 @@ class SpeciatedPopulation(Population):
 
                 totalDistance += s.leader.calculateCompatibilityDistance(randomSpecies.leader)
             
-            self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
+            # self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
 
             # print("averageInterspeciesDistance: " + str(self.averageInterspeciesDistance))
 
@@ -264,7 +264,7 @@ class SpeciatedPopulation(Population):
             for i in range(s.numToSpawn - len(s.members)):
                 baby: genes.Genome = None
 
-                if (random.random() > self.mutationRates.crossoverRate):
+                if (random.random() < self.mutationRates.crossoverRate):
                     member = random.choice(s.members)
                     # baby = fastCopy(member)
                     baby = deepcopy(member)

@@ -6,6 +6,7 @@ class NoveltySearch:
     def __init__(self, num_of_behaviors):
         self.num_of_behaviors = num_of_behaviors
         self.novelty_map = np.empty((1, self.num_of_behaviors))
+        self.novelty_dict = {}
         # Sparseness threshold as percentage of farthest distance between 2 points
         # p_threshold: float = farthestDistance*0.03
         self.p_threshold: float = 0.01
@@ -35,5 +36,35 @@ class NoveltySearch:
         print(sparsenesses)
         return sparsenesses
 
+    def calculate_local_competition(self, behaviors, fitnesses) -> (np.ndarray, np.ndarray):
+
+        behaviors = behaviors if type(behaviors) == np.ndarray else np.array([behaviors])
+
+        sparsenesses = np.zeros(behaviors.shape[0])
+        local_fitnesses = np.zeros(behaviors.shape[0])
+        for i, (behavior, fitness) in enumerate(zip(behaviors, fitnesses)):
+            sparseness = 0.0
+            if self.novelty_map.shape[0] > self.k:
+                kdtree = cKDTree(self.novelty_map)
+
+                neighbours, neighbours_indexes = kdtree.query(behavior, self.k)
+                neighbours = neighbours[neighbours < 1E308]
+
+
+                sparseness = (1 / self.k) * np.sum(neighbours)
+                sparsenesses[i] = sparseness
+
+                local_fitness = len([n for n in kdtree.data[neighbours_indexes] if tuple(n) in self.novelty_dict and self.novelty_dict[tuple(n)] < fitness])
+                local_fitnesses[i] = local_fitness
+
+            if (self.novelty_map.shape[0] <= self.k or sparseness > self.p_threshold):
+                self.novelty_dict[tuple(behavior)] = fitness
+                self.novelty_map = np.vstack((self.novelty_map, behavior))
+
+        print("Novelty map size: {}".format(self.novelty_map.shape[0]))
+        print(sparsenesses)
+        return (sparsenesses, local_fitnesses)
+
     def reset(self):
-        self.novelty_map = np.empty((1, self.num_of_behaviors))
+        self.novelty_map = np.zeros((1, self.num_of_behaviors))
+        self.novelty_dict = {}

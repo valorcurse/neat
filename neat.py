@@ -54,7 +54,7 @@ class NEAT:
             all_states.extend(states)
             fitnesses.extend(fitness)
 
-        return (np.array(all_states), np.array(fitnesses))
+        return (np.array(fitnesses), np.array(all_states))
 
 
     def epoch(self):
@@ -66,7 +66,7 @@ class NEAT:
                 self.population.refine_behaviors(self.eval_env)
 
             phenotypes = self.population.create_phenotypes()
-            states, fitnesses = self.evaluate_vectorized(phenotypes)
+            fitnesses, states = self.evaluate_vectorized(phenotypes)
             print("Fitnesses: {}".format(fitnesses))
 
             self.population.updatePopulation(MOUpdate(states, fitnesses))

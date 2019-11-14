@@ -52,7 +52,7 @@ class MutationRates:
     def __init__(self) -> None:
         self.crossoverRate = 0.3
 
-        self.newSpeciesTolerance = 3.0
+        self.newSpeciesTolerance = 30.0
 
         self.chanceToMutateBias = 0.7
 
@@ -488,7 +488,7 @@ class Genome:
 
                 if (random.random() < mutationRates.mutationRate):
                     link.weight += random.gauss(0.0, mutationRates.maxWeightPerturbation)
-                    link.weight = min(1.0, max(-1.0, link.weight))
+                    # link.weight = min(1.0, max(-1.0, link.weight))
 
                 # elif (random.random() < replacementProbability):
                 else:

@@ -49,18 +49,26 @@ class MOPopulation(SpeciatedPopulation):
     def updatePopulation(self, update: PopulationUpdate) -> None:
 
         features = self.aurora.characterize(update.behaviors)
-        novelties = self.novelty_map.calculate_novelty(features)
-        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=zip(-update.fitness, -novelties))
+        # novelties = self.novelty_map.calculate_novelty(features)
+        novelties, local_fitnesses = self.novelty_map.calculate_local_competition(features, update.fitness)
+        points = list(zip(-local_fitnesses, -novelties))
+
+        update.behaviors = features
+        update.fitness = local_fitnesses
+
+        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=points)
+        pg.plotting.plot_non_dominated_fronts(points)
 
         nd_genomes = []
         space_to_fill = int(self.population_size/2)
         space_left = space_to_fill
         i = 0
         while(space_left > 0):
-            non_dominated = [self.genomes[i] for i in ndf[i]]
-            space_left = max(0, space_left - len(nd_genomes))
+            non_dominated = [self.genomes[j] for j in ndf[i]]
             genomes_to_take = min(len(non_dominated), space_left)
             nd_genomes.extend(non_dominated[:genomes_to_take])
+
+            space_left = max(0, space_left - len(nd_genomes))
 
             i += 1
 
@@ -83,10 +91,11 @@ class MOPopulation(SpeciatedPopulation):
         self.aurora.refine(phenotypes, eval_env)
         print("Done.")
 
-        _, states = eval_env.evaluate(phenotypes)
+        fitnesses, states = eval_env.evaluate(phenotypes)
         print("Re-characterizing archived genomes...")
         features = self.aurora.characterize(states)
         print("Done.")
 
         self.novelty_map.reset()
-        self.novelty_map.calculate_novelty(features)
+        # self.novelty_map.calculate_novelty(features)
+        self.novelty_map.calculate_local_competition(features, fitnesses)
