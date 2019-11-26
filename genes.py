@@ -56,9 +56,9 @@ class MutationRates:
 
         self.chanceToMutateBias = 0.7
 
-        self.chanceToAddNeuron = 0.05
+        self.chanceToAddNeuron = 0.2
         # self.chanceToAddNeuron = 0.5
-        self.chanceToAddLink = 0.4
+        self.chanceToAddLink = 0.5
         # self.chanceToAddLink = 0.8
 
         self.chanceToAddRecurrentLink = 0.05
@@ -300,7 +300,8 @@ class Genome:
         
         triesToAddLink = 10  
         while (triesToAddLink > 0):
-            
+            triesToAddLink -= 1
+
             fromNeuron = random.choice(fromNeurons)
             toNeuron = random.choice([n for n in toNeurons if n.y > fromNeuron.y])
 
@@ -317,17 +318,11 @@ class Genome:
                     link.enabled = True
                     return
                 else:
-                    fromNeuron = toNeuron = None
+                    continue
             else:
-                break
+                self.addLink(fromNeuron, toNeuron)
+                return
 
-            triesToAddLink -= 1
-
-        if (fromNeuron is None or toNeuron is None):
-            return
-
-        self.addLink(fromNeuron, toNeuron)
-    
     def addLink(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, weight: float = 1.0) -> LinkGene:
         ID = self.innovations.createNewLinkInnovation(fromNeuron.ID, toNeuron.ID)
 
@@ -482,61 +477,38 @@ class Genome:
 
 
     def mutateWeights(self, mutationRates: MutationRates) -> None:
-            for link in self.links:
-                if (random.random() > (1 - mutationRates.chanceToMutateWeight)):
+            random_links = np.random.permutation(self.links)
+            for link in random_links:
+                if random.random() > mutationRates.chanceToMutateWeight:
                     continue
 
-                if (random.random() < mutationRates.mutationRate):
-                    link.weight += random.gauss(0.0, mutationRates.maxWeightPerturbation)
-                    # link.weight = min(1.0, max(-1.0, link.weight))
-
-                # elif (random.random() < replacementProbability):
+                if random.random() < mutationRates.mutationRate:
+                    # link.weight += random.gauss(0.0, mutationRates.maxWeightPerturbation)
+                    link.weight += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
                 else:
-                    link.weight = random.gauss(0.0, mutationRates.maxWeightPerturbation)
+                    link.weight += np.random.normal(0, 1, 1)[0]
+                    # link.weight = random.gauss(0.0, 1.0)
+
+                return
 
     def mutateActivation(self, mutationRates: MutationRates) -> None:
         neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
         for n in neurons:
-            if (random.random() > (1 - mutationRates.chanceToAddNeuron)):
+            if (random.random() > mutationRates.chanceToAddNeuron):
                 continue
 
             n.activation = random.choice(n.activations)
 
 
     def mutate(self, mutationRates: MutationRates) -> None:
-        # div = max(1,(self.chanceToAddNeuron*2 + self.chanceToAddLink*2))
-        # r = random.random()
-        # if r < (self.chanceToAddNeuron/div):
-        #     baby.addRandomNeuron()
-        # elif r < ((self.chanceToAddNeuron + self.chanceToAddNeuron)/div):
-        #     baby.removeNeuron()
-        # elif r < ((self.chanceToAddNeuron + self.chanceToAddNeuron +
-        #            self.chanceToAddLink)/div):
-        #     baby.addLink(self.chanceToAddRecurrentLink,
-        #              self.numOfTriesToFindLoopedLink, self.numOfTriesToAddLink)
-        # elif r < ((self.chanceToAddNeuron + self.chanceToAddNeuron +
-        #            self.chanceToAddLink + self.chanceToAddLink)/div):
-        #     baby.removeLink()
-
-
-        # if phase == Phase.COMPLEXIFYING:
-        # if (random.random() < mutationRates.chanceToDeleteNeuron):
-        #     self.removeRandomNeuron()
-
-        # if (random.random() < mutationRates.chanceToDeleteLink):
-        #     self.removeRandomLink()
-
         if (random.random() < mutationRates.chanceToAddNeuron):
             self.addRandomNeuron()
 
         if (random.random() < mutationRates.chanceToAddLink):
             self.addRandomLink()
 
-        # elif phase == Phase.PRUNING:
-
         self.mutateWeights(mutationRates)
-
-        self.mutateActivation(mutationRates)
+        # self.mutateActivation(mutationRates)
 
         self.links.sort()
 

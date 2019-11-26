@@ -9,7 +9,6 @@ from neat.population import PopulationUpdate, PopulationConfiguration
 from neat.genes import Genome, NeuronGene, MutationRates
 
 import networkx as nx
-from visualize import Visualize
 
 from itertools import groupby
 

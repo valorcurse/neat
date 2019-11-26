@@ -25,12 +25,30 @@ class Aurora:
         self.inputs_dim = inputs_dim
         self.encoding_dim = encoding_dim
 
+        lrelu = lambda x: tf.keras.layers.LeakyReLU(alpha=0.1)(x)
+        activation = lrelu
+        # activation = 'tanh'
+        # activation = 'sigmoid'
+
         # this is our input placeholder
         input_img = Input(shape=(self.inputs_dim,))
+
+
+        layer1 = Dense(int(inputs_dim/2), activation=activation)(input_img)
+        layer2 = Dense(int(inputs_dim/4), activation=activation)(layer1)
+        layer3 = Dense(int(inputs_dim/8), activation=activation)(layer2)
+        layer4 = Dense(int(inputs_dim/16), activation=activation)(layer3)
+
         # "encoded" is the encoded representation of the input
-        encoded = Dense(self.encoding_dim, activation='sigmoid')(input_img)
+        encoded = Dense(self.encoding_dim, activation=activation)(layer4)
+
+        layer5 = Dense(int(inputs_dim/16), activation=activation)(encoded)
+        layer6 = Dense(int(inputs_dim/8), activation=activation)(layer5)
+        layer7 = Dense(int(inputs_dim/4), activation=activation)(layer6)
+        layer8 = Dense(int(inputs_dim/2), activation=activation)(layer7)
+
         # "decoded" is the lossy reconstruction of the input
-        decoded = Dense(self.inputs_dim, activation='relu')(encoded)
+        decoded = Dense(self.inputs_dim, activation='tanh')(layer8)
 
         # this model maps an input to its reconstruction
         self.autoencoder = Model(input_img, decoded)
@@ -39,34 +57,37 @@ class Aurora:
         self.encoder = Model(input_img, encoded)
 
         # create a placeholder for an encoded (32-dimensional) input
-        encoded_input = Input(shape=(self.encoding_dim,))
+        # encoded_input = Input(shape=(self.encoding_dim,))
         # retrieve the last layer of the autoencoder model
-        decoder_layer = self.autoencoder.layers[-1]
+        # decoder_layer = self.autoencoder.layers[-1]
         # create the decoder model
-        decoder = Model(encoded_input, decoder_layer(encoded_input))
+        # decoder = Model(encoded_input, decoder_layer(encoded_input))
 
-        self.autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
-        self.autoencoder.save_weights('basic.h5')
+        self.autoencoder.compile(optimizer='adadelta', loss='binary_crossentropy')
+        # self.autoencoder.save_weights('basic.h5')
 
     def refine(self, phenotypes, eval_env: Evaluation):
-        self.autoencoder.load_weights('basic.h5')
+        # self.autoencoder.load_weights('basic.h5')
 
         last_loss = 1000.0
         loss = 1000.0
 
+        # self.autoencoder.save_weights('weights.tmp')
         while loss <= last_loss:
             last_loss = loss
 
             _, states = eval_env.evaluate(phenotypes)
 
-            ten_percent = max(1, int(states.shape[0] * 0.1))
+            ten_percent = max(1, int(states.shape[0] * 0.25))
 
             train = states[:-ten_percent]
             test = states[-ten_percent:]
 
+            self.autoencoder.save_weights('weights.tmp')
+
             hist = self.autoencoder.fit(train, train,
-                                        epochs=50,
-                                        batch_size=256,
+                                        epochs=15,
+                                        batch_size=train.shape[0],
                                         shuffle=True,
                                         validation_data=(test, test),
                                         verbose=0)
@@ -74,6 +95,8 @@ class Aurora:
             loss = abs(hist.history['val_loss'][-1])
 
             print("Training autoencoder. Loss: {}".format(loss))
+
+        self.autoencoder.load_weights('weights.tmp')
 
     def characterize(self, features):
         assert features.shape[1] == self.inputs_dim, \

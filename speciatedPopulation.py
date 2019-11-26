@@ -132,7 +132,7 @@ class SpeciatedPopulation(Population):
 
         # Temp 
         # for g in self.genomes:
-        #     for _ in range(50):
+        #     for _ in range(5):
         #         g.mutate(mutationRates)
 
         # self.speciate()
@@ -264,18 +264,19 @@ class SpeciatedPopulation(Population):
             for i in range(s.numToSpawn - len(s.members)):
                 baby: genes.Genome = None
 
-                if (random.random() < self.mutationRates.crossoverRate):
+                if random.random() > self.mutationRates.crossoverRate:
                     member = random.choice(s.members)
-                    # baby = fastCopy(member)
                     baby = deepcopy(member)
                     baby.mutate(self.mutationRates)
                 else:
                     # Tournament selection
-                    randomMembers = lambda: [random.choice(s.members) for _ in range(5)]
-                    g1 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
-                    g2 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
-                    
-                    baby = self.crossover(g1, g2)
+                    # randomMembers = lambda: [random.choice(s.members) for _ in range(5)]
+                    # g1 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
+                    # g2 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
+
+                    # baby = self.crossover(g1, g2)
+
+                    baby = self.crossover(random.choice(s.members), random.choice(s.members))
 
                 self.currentGenomeID += 1
                 baby.ID = self.currentGenomeID

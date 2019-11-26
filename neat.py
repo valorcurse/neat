@@ -1,6 +1,7 @@
 from typing import List, Any
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 import neat.innovations
 from neat.utils import chunks
@@ -29,7 +30,8 @@ class NEAT:
         self.milestone: float = 0.01
         self.epochs = -1
         # self.refinement_epoch = 50
-        self.refinement_epochs = [0, 50, 150, 350, 750, 1550]
+        self.refinement_epochs = [0, 25, 50, 100, 350, 750, 1550]
+        # self.refinement_epochs = [0, 10, 25, 50, 100, 150, 350, 750, 1550]
 
         # If using MapElites
         if isinstance(self.population_configuration, MapElitesConfiguration):
@@ -71,5 +73,8 @@ class NEAT:
 
             self.population.updatePopulation(MOUpdate(states, fitnesses))
             self.population.reproduce()
+
+            # plt.draw()
+            # plt.pause(0.1)
 
             yield

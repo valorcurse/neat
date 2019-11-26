@@ -103,7 +103,7 @@ class MapElites(Population):
 			member = random.choice(self.archivedGenomes)
 
 			baby: Optional[Genome] = None
-			if (random.random() > self.mutationRates.crossoverRate):
+			if random.random() > self.mutationRates.crossoverRate:
 				baby = self.newGenome(member.neurons, member.links, member.parents)
 				baby.mutate(self.mutationRates)
 

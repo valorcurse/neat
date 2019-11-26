@@ -90,6 +90,8 @@ class FeedforwardCUDA(object):
     def update(self, X):
         all_results = []
         all_adjs = zip(np.array([p.adjacency_matrix for p in self.phenotypes]), X, self.phenotypes)
+
+        # Split the phenotypes by adjacency matrix size, otherwise CUDA complains
         split_adjs = [list(g) for _, g in itertools.groupby(all_adjs, lambda a: a[0].shape)]
 
         for adjs_inputs in split_adjs:
@@ -105,7 +107,7 @@ class FeedforwardCUDA(object):
                 row[:x.shape[1]] = x[row_i]
 
             acts = np.array([p.activations for p in phenotypes])
-            results = np.array([np.empty(self.num_of_outputs, dtype=np.float32) for _ in adjs])
+            results = np.array([np.zeros(self.num_of_outputs, dtype=np.float32) for _ in adjs])
 
             cuda_mem = cuda.to_device(mem)
             cuda_adj = cuda.to_device(adjs)
@@ -151,7 +153,7 @@ class SubstrateCUDA(object):
         for batch_i in range(num_of_batches):
             start_index = batch_i*b_size
 
-            results = np.empty((b_size, self.num_out_nodes))
+            results = np.zeros((b_size, self.num_out_nodes))
             cuda_results = cuda.to_device(results)
 
             mem = np.array([np.zeros(self.adjacency_matrix.shape[0], dtype=np.float32) for _ in range(len(X))])
@@ -191,23 +193,24 @@ def feedForward(adj, acts, mem):
 
         weights = adj_t[m_i].T
         added = 0.0
-        for j in weights:
-            if j == 0:
+        for j in range(weights.shape[0]):
+            weight = weights[j]
+            input = mem[j]
+
+            if weight == 0.0 or input == 0.0:
                 continue
 
-            for m_2 in mem:
-                if m_2 == 0:
-                    continue
-
-                added += m_2*j
+            added += input*weight
+            # print(m_i, input, weight, added)
 
         function = acts[m_i]
         if function == 0:
-            mem[m_i] += math.tanh(added)
+            mem[m_i] = math.tanh(added)
+            # print(m_i, mem[m_i], added, math.tanh(added))
         elif function == 1:
-            mem[m_i] += math.sin(added)
+            mem[m_i] = math.sin(added)
         elif function == 2:
-            mem[m_i] += math.cos(added)
+            mem[m_i] = math.cos(added)
 
 @cuda.jit()
 def calc_substrate(X, Y, adj, acts, mems, results):
@@ -264,4 +267,4 @@ def execute_network(all_mem, all_adj, all_acts, all_results):
     # print("Mem After: {}".format(mem))
 
     for j in range(results.shape[0]):
-        results[j] = mem[-j - 1]
+        results[j] = mem[-results.shape[0] + j]
