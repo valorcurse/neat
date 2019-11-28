@@ -19,7 +19,7 @@ class NoveltySearch:
         self.novelty_dict = {}
         # Sparseness threshold as percentage of farthest distance between 2 points
         # p_threshold: float = farthestDistance*0.03
-        self.p_threshold: float = 0.05
+        self.p_threshold: float = 0.01
         self.k = 15 # Nr of neighbors to compare to
 
 

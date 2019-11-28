@@ -26,8 +26,8 @@ class Aurora:
         self.encoding_dim = encoding_dim
 
         lrelu = lambda x: tf.keras.layers.LeakyReLU(alpha=0.1)(x)
-        activation = lrelu
-        # activation = 'tanh'
+        # activation = lrelu
+        activation = 'tanh'
         # activation = 'sigmoid'
 
         # this is our input placeholder
@@ -46,9 +46,14 @@ class Aurora:
         layer6 = Dense(int(inputs_dim/8), activation=activation)(layer5)
         layer7 = Dense(int(inputs_dim/4), activation=activation)(layer6)
         layer8 = Dense(int(inputs_dim/2), activation=activation)(layer7)
+        # "decoded" is the lossy reconstruction of the input
+        decoded = Dense(self.inputs_dim, activation=activation)(layer8)
+
+        # "encoded" is the encoded representation of the input
+        # encoded = Dense(self.encoding_dim, activation=activation)(input_img)
 
         # "decoded" is the lossy reconstruction of the input
-        decoded = Dense(self.inputs_dim, activation='tanh')(layer8)
+        # decoded = Dense(self.inputs_dim, activation=activation)(encoded)
 
         # this model maps an input to its reconstruction
         self.autoencoder = Model(input_img, decoded)
@@ -63,7 +68,7 @@ class Aurora:
         # create the decoder model
         # decoder = Model(encoded_input, decoder_layer(encoded_input))
 
-        self.autoencoder.compile(optimizer='adadelta', loss='binary_crossentropy')
+        self.autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
         # self.autoencoder.save_weights('basic.h5')
 
     def refine(self, phenotypes, eval_env: Evaluation):
@@ -86,7 +91,7 @@ class Aurora:
             self.autoencoder.save_weights('weights.tmp')
 
             hist = self.autoencoder.fit(train, train,
-                                        epochs=15,
+                                        epochs=50,
                                         batch_size=train.shape[0],
                                         shuffle=True,
                                         validation_data=(test, test),

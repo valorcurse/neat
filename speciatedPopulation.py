@@ -13,7 +13,7 @@ from icontract import require
 
 
 class Species:
-    numGensAllowNoImprovement = 50
+    numGensAllowNoImprovement = 25
 
     def __init__(self, speciesID: int, leader: genes.Genome):
         self.ID: int = speciesID
@@ -118,7 +118,6 @@ class SpeciatedPopulation(Population):
 
         self.numOfInputs = configuration.n_inputs
         self.numOfOutputs = configuration.n_outputs
-
         
         baseGenome = self.newGenome()
         firstSpecies = Species(self.speciesNumber, baseGenome)

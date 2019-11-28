@@ -7,6 +7,8 @@ import pygmo as pg
 from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 import seaborn as sns
+import random
+from copy import deepcopy
 
 
 import neat.genes as genes
@@ -20,11 +22,13 @@ from neat.population import PopulationConfiguration
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
 class MOConfiguration(PopulationConfiguration):
-    def __init__(self, population_size: int, n_inputs: int, n_outputs: int):
+    def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int, obj_ranges: List[Tuple[float, float]]):
         self._data = {
             "population_size": population_size,
             "n_inputs": n_inputs,
-            "n_outputs": n_outputs
+            "n_outputs": n_outputs,
+            "behavior_dimensions": behavior_dimensions,
+            "objective_ranges": obj_ranges
         }
 
 class MOUpdate(SpeciesUpdate):
@@ -37,14 +41,13 @@ class MOPopulation(SpeciatedPopulation):
 
     def __init__(self, configuration: SpeciesConfiguration, innovations: Innovations, mutationRates: genes.MutationRates):
         super().__init__(configuration, innovations, mutationRates)
+
         encoding_dim = 2
-        behavior_dimensions = 14
-        behavior_steps = 250
-        behavior_matrix_size = behavior_dimensions * behavior_steps
+        self.behavior_dimensions = configuration.behavior_dimensions
 
         # Temp way to trigger aurora refinement
         self.epochs = 0
-        self.aurora = Aurora(encoding_dim, behavior_matrix_size)
+        self.aurora = Aurora(encoding_dim, self.behavior_dimensions)
 
         self.novelty_search = NoveltySearch(encoding_dim)
 
@@ -107,17 +110,25 @@ class MOPopulation(SpeciatedPopulation):
         print([(fitnesses[i], novelties[i]) for i in ndf[0]])
 
         nd_genomes = []
-        space_to_fill = int(self.population_size/5)
+        space_to_fill = int(self.population_size/2)
         space_left = space_to_fill
         i = 0
         while(space_left > 0):
-            non_dominated = [self.genomes[j] for j in ndf[i]]
+            front_genomes = [self.genomes[j] for j in ndf[i]]
+            front_points = [points[j] for j in ndf[i]]
+            front_ranks = [ndr[j] for j in ndf[i]]
 
-            genomes_to_take = min(len(non_dominated), space_left)
 
-            nd_genomes.extend(non_dominated[:genomes_to_take])
+            crowding_distances = pg.crowding_distance(front_points) if len(front_points) > 1 else np.zeros((len(front_points)))
+            for g, d, r in zip(front_genomes, crowding_distances, front_ranks):
+                g.crowding_distance = d
+                g.rank = r
 
-            space_left = max(0, space_left - len(non_dominated[:genomes_to_take]))
+            genomes_to_take = min(len(front_genomes), space_left)
+
+            nd_genomes.extend(front_genomes[:genomes_to_take])
+
+            space_left = max(0, space_left - len(front_genomes[:genomes_to_take]))
 
             i += 1
 
@@ -142,6 +153,47 @@ class MOPopulation(SpeciatedPopulation):
 
         self.epochs += 1
 
+    def newGeneration(self) -> None:
+
+        newPop = []
+        for s in self.species:
+            # s.members.sort(reverse=True, key=lambda x: x.fitness)
+
+            newPop.extend(s.members)
+
+            # topPercent = int(math.ceil(0.01 * len(s.members)))
+            # Grabbing the top 2 performing genomes
+            # for topMember in s.members[:topPercent]:
+            #     newPop.append(topMember)
+            #     s.numToSpawn -= 1
+
+            # Only use the survival threshold fraction to use as parents for the next generation.
+            # cutoff = int(math.ceil(0.1 * len(s.members)))
+            # Use at least two parents no matter what the threshold fraction result is.
+            # cutoff = max(cutoff, 2)
+            # s.members = s.members[:cutoff]
+
+            for i in range(s.numToSpawn - len(s.members)):
+                baby: genes.Genome = None
+
+                if random.random() > self.mutationRates.crossoverRate:
+                    member = random.choice(s.members)
+                    baby = deepcopy(member)
+                    baby.mutate(self.mutationRates)
+                else:
+                    # Tournament selection
+                    randomMembers = lambda: [random.choice(s.members) for _ in range(2)]
+                    g1 = sorted(randomMembers(), key=lambda x: (x.rank, -x.crowding_distance))[0]
+                    g2 = sorted(randomMembers(), key=lambda x: (x.rank, -x.crowding_distance))[0]
+
+                    baby = self.crossover(g1, g2)
+
+                self.currentGenomeID += 1
+                baby.ID = self.currentGenomeID
+
+                newPop.append(baby)
+
+        self.genomes = newPop
 
     def refine_behaviors(self, eval_env: Evaluation):
         plt.figure(1)
@@ -153,6 +205,7 @@ class MOPopulation(SpeciatedPopulation):
         print("Done.")
 
         fitnesses, states = eval_env.evaluate(phenotypes)
+
         print("Re-characterizing archived genomes...")
         features = self.aurora.characterize(states)
         print("Done.")

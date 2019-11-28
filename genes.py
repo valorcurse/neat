@@ -52,7 +52,7 @@ class MutationRates:
     def __init__(self) -> None:
         self.crossoverRate = 0.3
 
-        self.newSpeciesTolerance = 30.0
+        self.newSpeciesTolerance = 5.0
 
         self.chanceToMutateBias = 0.7
 
