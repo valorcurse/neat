@@ -183,13 +183,11 @@ class SubstrateCUDA(object):
 
 @cuda.jit(device=True)
 def feedForward(adj, acts, mem):
-    # cuda_i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     adj_t = adj.T
 
     for m_i in range(mem.shape[0]):
         m = mem[m_i]
-        if m != 0.0:
-            continue
+        if m != 0.0: continue
 
         weights = adj_t[m_i].T
         added = 0.0
@@ -201,12 +199,12 @@ def feedForward(adj, acts, mem):
                 continue
 
             added += input*weight
-            # print(m_i, input, weight, added)
+
+        if added == 0.0: continue
 
         function = acts[m_i]
         if function == 0:
             mem[m_i] = math.tanh(added)
-            # print(m_i, mem[m_i], added, math.tanh(added))
         elif function == 1:
             mem[m_i] = math.sin(added)
         elif function == 2:
@@ -253,7 +251,6 @@ def calculateLinks(X, Y, start_index, i, mem):
 @cuda.jit()
 def execute_network(all_mem, all_adj, all_acts, all_results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    # print(i)
     if i >= all_mem.shape[0]:
         return
 
@@ -262,9 +259,7 @@ def execute_network(all_mem, all_adj, all_acts, all_results):
     acts = all_acts[i]
     results = all_results[i]
 
-    # print("Mem before: {}".format(mem))
     feedForward(adj, acts, mem)
-    # print("Mem After: {}".format(mem))
 
     for j in range(results.shape[0]):
         results[j] = mem[-results.shape[0] + j]
