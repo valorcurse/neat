@@ -58,7 +58,6 @@ class SLink:
 
         self.recurrent = recurrent
 
-# @invariant(lambda self: all(isinstance(x, SNeuron) for x in self.neurons), ValueError("Some neurons are not of type SNeuron."))
 class Phenotype:
 
     def __init__(self, graph, ID: int) -> None:
@@ -79,15 +78,19 @@ class Phenotype:
 class FeedforwardCUDA(object):
 
 
-    def __init__(self, phenotypes: List[Phenotype]):
+    def __init__(self):
         self.threadsperblock = 32
+
+        self.mem = []
+
+    def update(self, phenotypes, X):
         self.blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
 
         self.phenotypes = phenotypes
 
         self.num_of_outputs = len(self.phenotypes[0].out_nodes)
 
-    def update(self, X):
+
         all_results = []
         all_adjs = zip(np.array([p.adjacency_matrix for p in self.phenotypes]), X, self.phenotypes)
 
@@ -116,6 +119,13 @@ class FeedforwardCUDA(object):
 
             execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_results)
             results = cuda_results.copy_to_host()
+
+            # print(mem)
+            mem = cuda_mem.copy_to_host()
+            # print(mem)
+            # print("------------------------")
+            self.mem = mem
+
             all_results.append(results)
 
         return np.vstack(all_results)
@@ -186,11 +196,12 @@ def feedForward(adj, acts, mem):
     adj_t = adj.T
 
     for m_i in range(mem.shape[0]):
-        m = mem[m_i]
-        if m != 0.0: continue
+        # m = mem[m_i]
+        # if mem[m_i] != 0.0:
+        #     sum = mem[m_i]
 
         weights = adj_t[m_i].T
-        added = 0.0
+        sum = 0.0 if mem[m_i] == 0.0 else mem[m_i]
         for j in range(weights.shape[0]):
             weight = weights[j]
             input = mem[j]
@@ -198,17 +209,21 @@ def feedForward(adj, acts, mem):
             if weight == 0.0 or input == 0.0:
                 continue
 
-            added += input*weight
+            sum += input*weight
 
-        if added == 0.0: continue
+        # if added == 0.0: continue
 
         function = acts[m_i]
         if function == 0:
-            mem[m_i] = math.tanh(added)
+            mem[m_i] = math.tanh(sum)
         elif function == 1:
-            mem[m_i] = math.sin(added)
+            mem[m_i] = math.sin(sum)
         elif function == 2:
-            mem[m_i] = math.cos(added)
+            mem[m_i] = math.cos(sum)
+        elif function == 3:
+            mem[m_i] = 1 / (1 + math.exp(-sum))
+        elif function == 4:
+            mem[m_i] = sum if sum > 0.0 else sum * 0.01  # Leaky ReLu
 
 @cuda.jit()
 def calc_substrate(X, Y, adj, acts, mems, results):

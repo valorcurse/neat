@@ -45,8 +45,8 @@ class NoveltySearch:
                 self.novelty_dict[tuple(behavior)] = fitness
                 self.novelty_map = np.vstack((self.novelty_map, behavior))
 
-                plt.figure(1)
-                plt.scatter(behavior[0], behavior[1])
+                # plt.figure(1)
+                # plt.scatter(behavior[0], behavior[1])
 
         print("Novelty map size: {}".format(self.novelty_map.shape[0]))
         # print(sparsenesses)

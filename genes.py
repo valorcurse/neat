@@ -36,6 +36,8 @@ class FuncsEnum(Enum):
     tanh = 0
     sin = 1
     cos = 2
+    sigmoid = 3
+    leakyRelu = 4
 
 
 # activations = [
@@ -101,7 +103,7 @@ class NeuronGene:
         self.activation = self.tanh
 
         # self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
-        self.activations = [self.tanh, self.sin, self.cos]
+        self.activations = [self.sigmoid, self.tanh, self.sin, self.cos, self.leakyRelu]
 
     def __repr__(self):
         return "NeuronGene(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
@@ -185,9 +187,11 @@ class Genome:
 
         if len(self.neurons) == 0:
             for _ in range(self.inputs):
-                self._addNeuron(NeuronType.INPUT)
+                new_neuron = self._addNeuron(NeuronType.INPUT)
+                new_neuron.activation = new_neuron.tanh
             for _ in range(self.outputs):
-                self._addNeuron(NeuronType.OUTPUT)
+                new_neuron = self._addNeuron(NeuronType.OUTPUT)
+                new_neuron.activation = new_neuron.tanh
         else:
             self.neurons = fastCopy(neurons)
 
@@ -208,10 +212,6 @@ class Genome:
     def __deepcopy__(self, memodict={}):
         copy_object = Genome(self.ID, self.inputs, self.outputs, self.innovations, self.neurons, self.links, self.parents)
         return copy_object
-
-    # @staticmethod
-    # def copy(other: Genome):
-    #     return Genome(other.ID, other.inputs, other.outputs, )
 
     def getLinksIn(self, neuron: NeuronGene) -> List[LinkGene]:
         return [l for l in self.links if l.toNeuron == neuron]
@@ -248,12 +248,9 @@ class Genome:
                 weightDifferences.append(math.fabs(selfLink.weight - otherLink.weight))
         
         longestLinks = max(1.0, max(len(other.links), len(self.links)))
-        # longestLinks = 1.0 if longestLinks <= 20 else longestLinks
-        # weightDifference = 0.0 if len(weightDifferences) == 0 else np.mean(weightDifferences)
         weightDifference = 0.0 if len(weightDifferences) == 0 else np.sum(weightDifferences)
 
         linkDistance = (disjointRate * disjointedLinks / longestLinks) + weightDifference * matchedRate
-        # print(linkDistance)
 
         disjointedNeurons = 0.0
 
@@ -271,13 +268,10 @@ class Genome:
             otherNeuron = otherNeuronDict.get(i)
 
 
-                # otherNeuron.ID if otherNeuron else "None"))
-
             if (selfNeuron is None or otherNeuron is None):
                 disjointedNeurons += 1.0
 
         longestNeurons = max(1.0, max(len(other.neurons), len(self.neurons)))
-        # longestNeurons = 1.0 if longestNeurons <= 20 else longestNeurons
 
         neuronDistance = (disjointRate * disjointedNeurons / longestNeurons) + matchedRate
 
@@ -504,8 +498,12 @@ class Genome:
         if (random.random() < mutationRates.chanceToAddNeuron):
             self.addRandomNeuron()
 
+
         if (random.random() < mutationRates.chanceToAddLink):
             self.addRandomLink()
+
+        if (random.random() < 1.0 - mutationRates.chanceToAddLink):
+            self.removeRandomLink()
 
         self.mutateWeights(mutationRates)
         # self.mutateActivation(mutationRates)
@@ -541,12 +539,14 @@ class Genome:
                 continue
 
             for link in linksDict[neuron.ID]:
+                if not link.enabled:
+                    continue
+
                 fromNeuron = None
                 # If we haven't visited this node before, add it to the queue
                 if link.fromNeuron.ID not in nodesVisited:
                     fromNeuron = SNeuron(link.fromNeuron)
                     queue.put(SNeuron(link.fromNeuron))
-
 
                 else:
                     fromNeuron = nodesVisited[link.fromNeuron.ID]

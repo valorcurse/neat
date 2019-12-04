@@ -53,17 +53,17 @@ class MOPopulation(SpeciatedPopulation):
 
         self.use_local_competition = False
 
-        plt.figure(1)
-        plt.ion()
-        plt.draw()
-        plt.pause(0.1)
-        plt.show()
-
-        plt.figure(2)
-        plt.ion()
-        plt.draw()
-        plt.pause(0.1)
-        plt.show()
+        # plt.figure(1)
+        # plt.ion()
+        # plt.draw()
+        # plt.pause(0.1)
+        # plt.show()
+        #
+        # plt.figure(2)
+        # plt.ion()
+        # plt.draw()
+        # plt.pause(0.1)
+        # plt.show()
 
         # self.fitness_novelty_vis = Visualize().fig.add_subplot(1, 2, 2)
         # self.fitness_novelty_vis.set_title("Fitness/Novelty")
@@ -93,12 +93,12 @@ class MOPopulation(SpeciatedPopulation):
         # self.fitness_novelty_vis.scatter(novelties, fitnesses)
         # plt.figure(1)
         # plt.scatter(features.T[0], features.T[1])
-
-        plt.figure(2)
-        plt.clf()
-        plt.scatter(novelties, fitnesses)
-        plt.draw()
-        plt.pause(0.01)
+        #
+        # plt.figure(2)
+        # plt.clf()
+        # plt.scatter(novelties, fitnesses)
+        # plt.draw()
+        # plt.pause(0.01)
 
         # Fitness and novelty are made negative, because the non dominated sorting
         # is a minimalization algorithm
