@@ -42,17 +42,11 @@ dash_queue = Queue()
 
 app.layout = html.Div([
     dcc.Store(id='storage', storage_type='memory'),
-dcc.Interval(id='my-interval', interval=1 * 1000),
+    dcc.Interval(id='my-interval', interval=1 * 1000),
     html.Div(id='my-output-interval'),
     dcc.Dropdown(id='dropdown'),
     dcc.Graph(id='network', figure=go.Figure()),
-    dcc.Slider(
-            id='time_range',
-            min=0,
-            max=20,
-            step=0.5,
-            value=[5, 15]
-        ),
+    # dcc.Slider(id='time_range', min=0, value=0),
 
 ])
 
@@ -122,69 +116,120 @@ def display_output(n):
         now.second
     )
 
-@app.callback([Output('time_range', 'max'), Output('time_range', 'marks')], [Input('dropdown', 'value')], [State('storage', 'data')])
-def update_graph_live(i, data):
-    if data is None or i is None:
+# @app.callback([Output('time_range', 'max'), Output('time_range', 'marks')], [Input('dropdown', 'value')], [State('storage', 'data')])
+# def update_graph_live(i, data):
+#     if data is None or i is None:
+#         raise PreventUpdate
+#
+#     network = data['network'][i]
+#     n = network['n']
+#
+#     return n, {j: j for j in range(n)}
+
+
+@app.callback(Output('network', 'figure'),
+              # [Input('dropdown', 'value'), Input('time_range', 'value')],
+              [Input('dropdown', 'value')],
+              [State('storage', 'data'), State('network', 'figure')])
+def update_graph_live(dropdown_i, data, fig):
+    if None in [data, dropdown_i]:
         raise PreventUpdate
 
-    network = data['network'][i]
-    n = network['n']
+    print("Drawing network #{}".format(dropdown_i))
 
-    return network['n'], {j: j for j in range(n)}
-
-@app.callback(Output('network', 'figure'), [Input('dropdown', 'value')], [State('storage', 'data'), State('network', 'figure')])
-def update_graph_live(i, data, fig):
-    if data is None or i is None:
-        raise PreventUpdate
-
-    print("Drawing network #{}".format(i))
-
-    network = data['network'][i]
-
-    node_trace = go.Scatter(
-        x=network['node_x'],
-        y=network['node_y'],
-        # text=[],
-        mode='markers',
-        # hoverinfo='text',
-        marker=dict(
-            showscale=True,
-            colorscale='YlGnBu',
-            reversescale=True,
-            color=[],
-            size=10,
-            colorbar=dict(
-                thickness=15,
-                title='Node Connections',
-                xanchor='left',
-                titleside='right'
-            ),
-            line=dict(width=2)))
+    network = data['network'][dropdown_i]
+    # print(slider_i, len(data['node_sizes'][dropdown_i]))
+    node_sizes = data['node_sizes'][dropdown_i]
+    n_nodes = network['n']
+    graph_steps = len(data['node_sizes'][dropdown_i])
 
     edge_trace = go.Scatter(
         x=network['edge_x'], y=network['edge_y'],
-        line=dict(width=0.5, color='#888'),
+        line=dict(width=1.5, color='#888'),
         hoverinfo='none',
         mode='lines')
 
 
+    all_node_traces = []
+    steps = []
+    for i in range(n_nodes):
+        scatter = go.Scatter(
+            x=network['node_x'],
+            y=network['node_y'],
+            mode='markers',
+            # hoverinfo='text',
+            marker=dict(
+                showscale=True,
+                colorscale='YlGnBu',
+                reversescale=True,
+                color=[],
+                size=np.array(node_sizes[i])*15 + 5,
+                colorbar=dict(
+                    thickness=15,
+                    title='Node Connections',
+                    xanchor='left',
+                    titleside='right'
+                ),
+                line=dict(width=2)
+            )
+        )
+        all_node_traces.append(scatter)
+
+        step = dict(
+            # Update method allows us to update both trace and layout properties
+            method='animate',
+            label=i,
+            args=[
+                [i],
+                # Make the ith trace visible
+                {
+                    "frame": {"duration": 300, "redraw": False},
+                    "mode": "immediate", "transition": {"duration": 300}
+                },
+
+                # Set the title for the ith trace
+                # {'title.text': str(i)}
+            ],
+        )
+        steps.append(step)
+
+
+    sliders = [go.layout.Slider(
+        active=0,
+        currentvalue={"prefix": "Step: "},
+        # pad={"t": 50},
+        steps=steps
+    )]
+
     return go.Figure(
-        data=[edge_trace, node_trace],
+        data=[all_node_traces[0], edge_trace],
         layout=go.Layout(
             # title='<br>Network Graph of '+str(len(data[0]))+' neurons',
-            titlefont=dict(size=16),
-            showlegend=False,
+            # titlefont=dict(size=16),
+            # showlegend=False,
             hovermode='closest',
-            margin=dict(b=20,l=5,r=5,t=40),
-            annotations=[ dict(
+            # margin=dict(b=20,l=5,r=5,t=40),
+            sliders=sliders,
+            annotations=[dict(
                 showarrow=False,
                 xref="paper", yref="paper",
-                x=0.005, y=-0.002 )
-            ],
+                x=0.005, y=-0.002
+            )],
+            updatemenus=[dict(
+                type="buttons",
+                buttons=[dict(label="Play",
+                              method="animate",
+                              args= [None, {"frame": {"duration": 500, "redraw": False},
+                                            "fromcurrent": True,
+                                            "transition": {"duration": 300, "easing": "quadratic-in-out"}}
+                                     ],
+                        )]
+            )],
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
-
-    # return fig
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
+        ),
+        frames=[go.Frame(data=[n]) for n in all_node_traces]
+    )
 
 class Visualize(Process):
 
@@ -198,65 +243,9 @@ class Visualize(Process):
         self.video_size = (0, 0)
 
 
-    # def new_phenotype(self):
-    #     self.G = self.phenotype.graph
-    #     self.pos = nx.get_node_attributes(self.G, 'pos')
-
     def run(self):
         import logging
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
 
-        # self.app.callback(Output('dropdown', 'options'), [])(self.update_date_dropdown)
-        # self.app.callback(Output('', ''), [Input('my-interval', 'n_intervals')])(self.update_queue)
-
         app.run_server(debug=False, processes=4, threaded=False)
-        # print("Running")
-        # while True:
-            # if not self.queue.empty():
-            #     next_vis = self.queue.get(block=False)
-            #     self.phenotype = next_vis[0]
-            #     self.node_sizes = next_vis[1]
-            #     self.images.append(next_vis[2])
-            #
-            #     # self.video_size = self.images[0].shape
-            #     print("Updating images. Number of options: {}".format(len(self.images)))
-            #
-            #     self.app.callback(Output('dropdown', 'options'), [])(self.update_date_dropdown)
-
-                # self.fig.update_layout(
-                #     updatemenus=[
-                #         go.layout.Updatemenu(
-                #             buttons=[dict(
-                #                 args=["type", "surface"],
-                #                 label="Run #{}".format(i),
-                #                 method="update") for i, image in enumerate(self.images)]
-                #         )
-                #     ]
-                # )
-                # self.new_phenotype()
-
-                # self.fig = px.imshow(self.images[0])
-                # plot(self.fig)
-                # self.fig.show()
-                # if self.ani is not None:
-                    # print("Stopping animation")
-                    # self.ani.event_source.stop()
-                    # del self.ani
-
-                # self.ani = animation.FuncAnimation(self.fig, self.animate, fargs=(self.images, self.node_sizes), interval=1, frames=len(self.images),
-                #                                        repeat=False, blit=False)
-                # plt.show()
-            # self.canvas.draw()
-            # plt.pause(0.01)
-            # self.canvas.print_figure('test')
-    # def init(self):
-    #     return [self.im, self.nodes]
-
-    # def animate(self, i, images, node_sizes):
-        # print("Animating: {}/{}".format(i, len(images)))
-        # print(hex(id(images)))
-
-        # self.nodes.set_sizes(node_sizes[i]*150 + 50)
-        # self.im.set_data(images[i])
-        # return [self.im, self.nodes]
