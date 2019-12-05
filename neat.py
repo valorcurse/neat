@@ -71,6 +71,9 @@ class NEAT:
         fitness_range = self.objective_ranges[0]
         all_fitnesses = (all_fitnesses - fitness_range[0]) / (fitness_range[1] - fitness_range[0])
 
+        for phenotype, fitness in zip(phenotypes, all_fitnesses):
+            phenotype.fitness = fitness
+
         return (np.array(all_fitnesses), np.array(all_features))
 
 
@@ -82,8 +85,8 @@ class NEAT:
             if self.epochs in self.refinement_epochs:
                 self.population.refine_behaviors(self.eval_env)
 
-            phenotypes = self.population.create_phenotypes()
-            fitnesses, states = self.evaluate_vectorized(phenotypes)
+            self.phenotypes = self.population.create_phenotypes()
+            fitnesses, states = self.evaluate_vectorized(self.phenotypes)
             print("Fitnesses: {}".format(fitnesses))
 
             self.population.updatePopulation(MOUpdate(states, fitnesses))

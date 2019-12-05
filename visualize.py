@@ -57,19 +57,9 @@ def on_interval(n, data):
         # you don't want to update the store for nothing.
         raise PreventUpdate
 
-    # print(data)
     data = data or {'network': [], 'node_sizes': []}
-    # print(data)
-    # print(len(data['images']))
     queue_data = dash_queue.get()
-    # print(queue_data[1])
-    # images = data['images']
-    # images.append(queue_data[2][1][1][1])
-    # data['node_sizes'].append(queue_data[1])
     G = queue_data[0]
-    # node_adjacencies = []
-    # for node, adjacencies in enumerate(G.adjacency()):
-    #     node_adjacencies.append(len(adjacencies[1]))
 
     node_x = []
     node_y = []
@@ -90,7 +80,12 @@ def on_interval(n, data):
         edge_y.append(y1)
         edge_y.append(None)
 
-    data['network'].append({'n': len(queue_data[1]), 'node_x': node_x, 'node_y': node_y, 'edge_x': edge_x, 'edge_y': edge_y})
+    data['network'].append({
+        'n': len(queue_data[1]),
+        'node_x': node_x, 'node_y': node_y,
+        'edge_x': edge_x, 'edge_y': edge_y,
+        'weights': [e[2]['weight'] for e in G.edges().data()]
+    })
     data['node_sizes'].append(queue_data[1])
 
     print("Updating session storage: {}".format(len(data['network'])))
@@ -116,19 +111,8 @@ def display_output(n):
         now.second
     )
 
-# @app.callback([Output('time_range', 'max'), Output('time_range', 'marks')], [Input('dropdown', 'value')], [State('storage', 'data')])
-# def update_graph_live(i, data):
-#     if data is None or i is None:
-#         raise PreventUpdate
-#
-#     network = data['network'][i]
-#     n = network['n']
-#
-#     return n, {j: j for j in range(n)}
-
 
 @app.callback(Output('network', 'figure'),
-              # [Input('dropdown', 'value'), Input('time_range', 'value')],
               [Input('dropdown', 'value')],
               [State('storage', 'data'), State('network', 'figure')])
 def update_graph_live(dropdown_i, data, fig):
@@ -138,17 +122,17 @@ def update_graph_live(dropdown_i, data, fig):
     print("Drawing network #{}".format(dropdown_i))
 
     network = data['network'][dropdown_i]
-    # print(slider_i, len(data['node_sizes'][dropdown_i]))
     node_sizes = data['node_sizes'][dropdown_i]
     n_nodes = network['n']
     graph_steps = len(data['node_sizes'][dropdown_i])
+    weights = network['weights']
 
     edge_trace = go.Scatter(
         x=network['edge_x'], y=network['edge_y'],
         line=dict(width=1.5, color='#888'),
         hoverinfo='none',
-        mode='lines')
-
+        mode='lines',
+    )
 
     all_node_traces = []
     steps = []
@@ -156,14 +140,18 @@ def update_graph_live(dropdown_i, data, fig):
         scatter = go.Scatter(
             x=network['node_x'],
             y=network['node_y'],
-            mode='markers',
+            mode="markers+text",
+            text=np.around(node_sizes[i], 2),
+            textposition="bottom right",
             # hoverinfo='text',
             marker=dict(
                 showscale=True,
-                colorscale='YlGnBu',
                 reversescale=True,
-                color=[],
-                size=np.array(node_sizes[i])*15 + 5,
+                colorscale='rdbu',
+                color=node_sizes[i],
+                cmid=0,
+                size=20,
+                # size=np.array(node_sizes[i])*10 + 10,
                 colorbar=dict(
                     thickness=15,
                     title='Node Connections',
@@ -186,13 +174,9 @@ def update_graph_live(dropdown_i, data, fig):
                     "frame": {"duration": 300, "redraw": False},
                     "mode": "immediate", "transition": {"duration": 300}
                 },
-
-                # Set the title for the ith trace
-                # {'title.text': str(i)}
             ],
         )
         steps.append(step)
-
 
     sliders = [go.layout.Slider(
         active=0,
@@ -201,14 +185,12 @@ def update_graph_live(dropdown_i, data, fig):
         steps=steps
     )]
 
-    return go.Figure(
+    fig = go.Figure(
         data=[all_node_traces[0], edge_trace],
         layout=go.Layout(
-            # title='<br>Network Graph of '+str(len(data[0]))+' neurons',
-            # titlefont=dict(size=16),
             # showlegend=False,
             hovermode='closest',
-            # margin=dict(b=20,l=5,r=5,t=40),
+            margin=dict(b=20,l=5,r=5,t=40),
             sliders=sliders,
             annotations=[dict(
                 showarrow=False,
@@ -228,24 +210,42 @@ def update_graph_live(dropdown_i, data, fig):
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
         ),
-        frames=[go.Frame(data=[n]) for n in all_node_traces]
+        frames=[go.Frame(data=[n], name=str(i)) for i, n in enumerate(all_node_traces)]
     )
+
+    print(network['edge_x'], network['edge_y'])
+    w_i = 0
+    for i in range(0, len(network['edge_x']) - 1, 3):
+        x0 = network['edge_x'][i]
+        x1 = network['edge_x'][i + 1]
+        y0 = network['edge_y'][i]
+        y1 = network['edge_y'][i + 1]
+
+        print(x0, x1, y0, y1)
+
+        fig.add_annotation(
+            go.layout.Annotation(
+                x=(x0+x1)/2,
+                y=(y0+y1)/2,
+                text=str(np.round(weights[w_i], 2)),
+                # showarrow=False,
+                xanchor='left',
+                yanchor='bottom'
+            )
+        )
+
+        w_i += 1
+
+    return fig
 
 class Visualize(Process):
 
     def __init__(self):
         super(Visualize, self).__init__()
-        # global queue
-        # queue = main_queue
-
-        self.data = []
-
-        self.video_size = (0, 0)
-
 
     def run(self):
         import logging
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
 
-        app.run_server(debug=False, processes=4, threaded=False)
+        app.run_server(debug=False, processes=1, threaded=False)

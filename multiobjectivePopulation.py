@@ -90,15 +90,9 @@ class MOPopulation(SpeciatedPopulation):
         else:
             novelties = self.novelty_search.calculate_novelty(features, fitnesses)
 
-        # self.fitness_novelty_vis.scatter(novelties, fitnesses)
-        # plt.figure(1)
-        # plt.scatter(features.T[0], features.T[1])
-        #
-        # plt.figure(2)
-        # plt.clf()
-        # plt.scatter(novelties, fitnesses)
-        # plt.draw()
-        # plt.pause(0.01)
+
+        for genome, novelty in zip(self.genomes, novelties):
+            genome.novelty = novelty
 
         # Fitness and novelty are made negative, because the non dominated sorting
         # is a minimalization algorithm

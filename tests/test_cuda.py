@@ -22,7 +22,7 @@ def test_single_edges():
 
     phenotype = Phenotype(G, 0)
 
-    inputs = np.array([1, 1, 1])
+    inputs = np.array([0.5, 0.5, 0.5])
 
     feedforward_highest = FeedforwardCUDA()
 
@@ -125,3 +125,59 @@ def test_different_input():
     answers[1] = math.tanh(hidden_node * 0.25)
 
     np.testing.assert_array_almost_equal(result, answers)
+
+def test_custom():
+    G = nx.DiGraph()
+    G.add_nodes_from([
+        (1, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(-1.0, -1.0)}),
+        (2, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (3, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (4, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (5, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (6, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (7, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (8, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (9, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (10, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}), #
+        (11, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}), #
+        (12, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (13, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (14, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (15, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (16, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (17, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (18, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (19, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (20, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (21, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (22, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (23, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+        (24, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
+
+        (25, {"activation": np.tanh, "type": NeuronType.HIDDEN, "pos":(1.0, -1.0)}),
+
+        (26, {"activation": np.tanh, "type": NeuronType.OUTPUT, "pos":(-1.0, 1.0)}),
+        (27, {"activation": np.tanh, "type": NeuronType.OUTPUT, "pos":(-1.0, 1.0)}),
+        (28, {"activation": np.tanh, "type": NeuronType.OUTPUT, "pos":(-1.0, 1.0)}),
+        (29, {"activation": np.tanh, "type": NeuronType.OUTPUT, "pos":(-1.0, 1.0)}),
+    ])
+
+    G.add_weighted_edges_from([
+        (10, 25, 1.0),
+        (11, 25, 1.0),
+        (25, 27, 1.0),
+    ])
+
+    phenotype = Phenotype(G, 0)
+
+    inputs = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.89, 0.996, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+    feedforward_highest = FeedforwardCUDA()
+
+    result = feedforward_highest.update([phenotype], [inputs])[0]
+    print(result)
+    print(feedforward_highest.mem[0])
+    # norm_inputs = np.tanh(inputs)
+    # answers = np.tanh([norm_inputs[0]*0.4, norm_inputs[1]*0.1])
+    #
+    # np.testing.assert_array_almost_equal(result, answers)

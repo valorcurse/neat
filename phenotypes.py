@@ -72,6 +72,8 @@ class Phenotype:
 
         self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
 
+        self.fitness = 0.0
+
     def update(self, X):
         pass
 
@@ -84,11 +86,19 @@ class FeedforwardCUDA(object):
         self.mem = []
 
     def update(self, phenotypes, X):
+
+        if type(X) is not np.ndarray:
+            X = np.array(X)
+
         self.blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
 
         self.phenotypes = phenotypes
 
         self.num_of_outputs = len(self.phenotypes[0].out_nodes)
+
+
+        assert X.shape[1] == len(phenotypes[0].in_nodes), \
+            "Incorrect number of input values. There are {} instead of {}".format(X.shape[1], len(phenotypes[0].in_nodes))
 
 
         all_results = []
@@ -216,6 +226,7 @@ def feedForward(adj, acts, mem):
         function = acts[m_i]
         if function == 0:
             mem[m_i] = math.tanh(sum)
+            # print("{} -> {}")
         elif function == 1:
             mem[m_i] = math.sin(sum)
         elif function == 2:

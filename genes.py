@@ -173,7 +173,7 @@ class LinkGene:
 # @invariant(lambda self: len([n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]) == self.outputs, ValueError("Number of OUTPUT neurons incorrect."))
 class Genome:
 
-    def __init__(self, ID: int, inputs: int, outputs: int, innovations: Innovations = DummyInnovations(), neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents: List[Genome]=[]) -> None:
+    def __init__(self, ID: int, inputs: int, outputs: int, innovations: Innovations, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents: List[Genome]=[]) -> None:
         self.ID = ID
         self.innovations: Innovations = innovations
         self.parents = parents
@@ -239,7 +239,6 @@ class Genome:
         for i in combinedIndexes:
             selfLink = selfLinksDict.get(i)
             otherLink = otherLinksDict.get(i)
-
 
 
             if ((selfLink is None) or (otherLink is None)):
@@ -502,10 +501,10 @@ class Genome:
         if (random.random() < mutationRates.chanceToAddLink):
             self.addRandomLink()
 
-        if (random.random() < 1.0 - mutationRates.chanceToAddLink):
-            self.removeRandomLink()
+        # if (random.random() < 1.0 - mutationRates.chanceToAddLink):
+        #     self.removeRandomLink()
 
-        self.mutateWeights(mutationRates)
+        # self.mutateWeights(mutationRates)
         # self.mutateActivation(mutationRates)
 
         self.links.sort()
