@@ -68,8 +68,8 @@ class NEAT:
         assert all_features.shape[0] == len(phenotypes), "Combined states have size {} instead of {}.".format(len(all_features), len(phenotypes))
 
         # Normalize objectives
-        fitness_range = self.objective_ranges[0]
-        all_fitnesses = (all_fitnesses - fitness_range[0]) / (fitness_range[1] - fitness_range[0])
+        # fitness_range = self.objective_ranges[0]
+        # all_fitnesses = (all_fitnesses - fitness_range[0]) / (fitness_range[1] - fitness_range[0])
 
         for phenotype, fitness in zip(phenotypes, all_fitnesses):
             phenotype.fitness = fitness

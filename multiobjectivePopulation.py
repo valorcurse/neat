@@ -8,11 +8,12 @@ from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 import seaborn as sns
 import random
-from copy import deepcopy
 
+from copy import deepcopy
 
 import neat.genes as genes
 from neat.aurora import Aurora
+from neat.utils import fastCopy
 from neat.visualize import Visualize
 from neat.evaluation import Evaluation
 from neat.innovations import Innovations
@@ -42,7 +43,7 @@ class MOPopulation(SpeciatedPopulation):
     def __init__(self, configuration: SpeciesConfiguration, innovations: Innovations, mutationRates: genes.MutationRates):
         super().__init__(configuration, innovations, mutationRates)
 
-        encoding_dim = 2
+        encoding_dim = 8
         self.behavior_dimensions = configuration.behavior_dimensions
 
         # Temp way to trigger aurora refinement
@@ -52,31 +53,6 @@ class MOPopulation(SpeciatedPopulation):
         self.novelty_search = NoveltySearch(encoding_dim)
 
         self.use_local_competition = False
-
-        # plt.figure(1)
-        # plt.ion()
-        # plt.draw()
-        # plt.pause(0.1)
-        # plt.show()
-        #
-        # plt.figure(2)
-        # plt.ion()
-        # plt.draw()
-        # plt.pause(0.1)
-        # plt.show()
-
-        # self.fitness_novelty_vis = Visualize().fig.add_subplot(1, 2, 2)
-        # self.fitness_novelty_vis.set_title("Fitness/Novelty")
-
-        # self.fig, self.ax = plt.subplots()
-        # self.ax.set(xlabel="Exam score-1", ylabel="Exam score-2")
-        # self.ax.legend()
-        # plt.axis([-1, 1, -1, 1])
-        # plt.xlabel('Novelty')
-        # plt.ylabel('Fitness')
-        # # plt.tight_layout()
-        # plt.ion()
-        # plt.show()
 
     @require(lambda update: isinstance(update, MOUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
@@ -172,6 +148,7 @@ class MOPopulation(SpeciatedPopulation):
 
                 if random.random() > self.mutationRates.crossoverRate:
                     member = random.choice(s.members)
+                    # baby = fastCopy(member)
                     baby = deepcopy(member)
                     baby.mutate(self.mutationRates)
                 else:

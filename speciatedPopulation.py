@@ -34,7 +34,7 @@ class Species:
         self.highestFitness: float = 0.0
         self.generationsWithoutImprovement: int = 0
 
-        self.milestone: float = leader.milestone
+        # self.milestone: float = leader.milestone
 
         self.stagnant: bool = False
 
@@ -129,12 +129,12 @@ class SpeciatedPopulation(Population):
             self.genomes.append(newGenome)
             self.currentGenomeID += 1
 
-        # Temp 
+        # Temp
         # for g in self.genomes:
-        #     for _ in range(5):
+        #     for _ in range(50):
         #         g.mutate(mutationRates)
 
-        # self.speciate()
+        self.speciate()
 
     def __len__(self):
         return len(self.genomes)
@@ -202,8 +202,8 @@ class SpeciatedPopulation(Population):
         for i in unspeciated:
             genome = self.genomes[i]
 
-            # closestDistance = self.mutationRates.newSpeciesTolerance
-            closestDistance = max(self.mutationRates.newSpeciesTolerance, self.averageInterspeciesDistance)
+            closestDistance = self.mutationRates.newSpeciesTolerance
+            # closestDistance = max(self.mutationRates.newSpeciesTolerance, self.averageInterspeciesDistance)
             closestSpecies = None
             for s in self.species:
                 distance = genome.calculateCompatibilityDistance(s.leader)

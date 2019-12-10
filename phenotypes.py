@@ -17,9 +17,9 @@ import itertools
 
 import time
 
-
+import neat.genes
 from neat.neatTypes import NeuronType
-from neat.genes import NeuronGene, FuncsEnum
+# from neat.genes import NeuronGene, FuncsEnum
 # from neat.cuda_matmult import cu_square_matrix_mul
 
 from copy import deepcopy
@@ -29,11 +29,13 @@ np.set_printoptions(edgeitems=30, linewidth=100000,
 
 class SNeuron:
     
-    def __init__(self, neuronGene: NeuronGene) -> None:
+    def __init__(self, neuronGene: neat.phenotypes.NeuronGene) -> None:
         self.linksIn: List[SLink] = []
 
         self.activation = neuronGene.activation
-        self.output: float = 1.0 if neuronGene.neuronType == NeuronType.BIAS else 0.0
+        self.bias = 1.0
+        # self.output: float = 1.0 if neuronGene.neuronType == NeuronType.BIAS else 0.0
+        self.output: float = 0.0
 
         self.neuronType = neuronGene.neuronType
 
@@ -43,7 +45,7 @@ class SNeuron:
         self.x: float = neuronGene.x
 
     def activate(self, x: float) -> float:
-        return self.activation(x)
+        return self.activation(x + self.bias)
 
     def __repr__(self):
         return "SNeuron(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
@@ -70,7 +72,8 @@ class Phenotype:
 
         self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
 
-        self.activations = np.array([FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
+        self.activations = np.array([neat.genes.FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
+        self.bias = np.array([self.graph.nodes()[n]['bias'] for n in self.graph.nodes()], dtype=np.int32)
 
         self.fitness = 0.0
 
@@ -98,7 +101,11 @@ class FeedforwardCUDA(object):
 
 
         assert X.shape[1] == len(phenotypes[0].in_nodes), \
-            "Incorrect number of input values. There are {} instead of {}".format(X.shape[1], len(phenotypes[0].in_nodes))
+            "Incorrect number of input values. There are {} instead of {}: {}".format(
+                X.shape[1],
+                len(phenotypes[0].in_nodes),
+                phenotypes[0].graph.nodes.data()
+            )
 
 
         all_results = []
@@ -120,18 +127,20 @@ class FeedforwardCUDA(object):
                 row[:x.shape[1]] = x[row_i]
 
             acts = np.array([p.activations for p in phenotypes])
+            bias = np.array([p.bias for p in phenotypes])
             results = np.array([np.zeros(self.num_of_outputs, dtype=np.float32) for _ in adjs])
 
             cuda_mem = cuda.to_device(mem)
             cuda_adj = cuda.to_device(adjs)
             cuda_acts = cuda.to_device(acts)
+            cuda_bias = cuda.to_device(bias)
             cuda_results = cuda.to_device(results)
 
-            execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_results)
+            execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_results)
             results = cuda_results.copy_to_host()
 
             # print(mem)
-            mem = cuda_mem.copy_to_host()
+            # mem = cuda_mem.copy_to_host()
             # print(mem)
             # print("------------------------")
             self.mem = mem
@@ -202,7 +211,7 @@ class SubstrateCUDA(object):
         return links
 
 @cuda.jit(device=True)
-def feedForward(adj, acts, mem):
+def feedForward(adj, acts, bias, mem):
     adj_t = adj.T
 
     for m_i in range(mem.shape[0]):
@@ -224,6 +233,7 @@ def feedForward(adj, acts, mem):
         # if added == 0.0: continue
 
         function = acts[m_i]
+        sum += bias[m_i]
         if function == 0:
             mem[m_i] = math.tanh(sum)
             # print("{} -> {}")
@@ -275,7 +285,7 @@ def calculateLinks(X, Y, start_index, i, mem):
     mem[3] = Y[y][1]
 
 @cuda.jit()
-def execute_network(all_mem, all_adj, all_acts, all_results):
+def execute_network(all_mem, all_adj, all_acts, all_bias, all_results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     if i >= all_mem.shape[0]:
         return
@@ -283,9 +293,10 @@ def execute_network(all_mem, all_adj, all_acts, all_results):
     mem = all_mem[i]
     adj = all_adj[i]
     acts = all_acts[i]
+    bias = all_bias[i]
     results = all_results[i]
 
-    feedForward(adj, acts, mem)
+    feedForward(adj, acts, bias, mem)
 
     for j in range(results.shape[0]):
         results[j] = mem[-results.shape[0] + j]

@@ -83,6 +83,7 @@ class MapElites(Population):
 
 	def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):				
 		genome = Genome(self.currentGenomeID, self.inputs, self.outputs, self.innovations, neurons, links, parents)
+
 		self.currentGenomeID += 1
 
 		return genome

@@ -29,18 +29,17 @@ class Innovations:
         if (ID == -1):
             newInnovation = Innovation(InnovationType.LINK, len(self.listOfInnovations), fromID, toID)
             self.listOfInnovations.append(newInnovation)
-            ID = len(self.listOfInnovations) - 1
+            ID = len(self.listOfInnovations)
 
-        return ID;
+        return ID
 
     def createNewNeuronInnovation(self, neuronType: NeuronType, fromID: Optional[int], toID: Optional[int]) -> int:
-        matchingInnovation = self.checkInnovation(fromID, toID, InnovationType.NEURON)
-        # ID: int = len(self.listOfInnovations) if neuronType != NeuronType.HIDDEN or matchingInnovation == -1 else -1
-        ID: int = len(self.listOfInnovations) if matchingInnovation == -1 else -1
+        ID = self.checkInnovation(fromID, toID, InnovationType.NEURON)
 
-        newInnovation = Innovation(InnovationType.NEURON, ID, fromID, toID)
-
-        self.listOfInnovations.append(newInnovation)
+        if (ID == -1):
+            newInnovation = Innovation(InnovationType.NEURON, ID, fromID, toID)
+            self.listOfInnovations.append(newInnovation)
+            ID = len(self.listOfInnovations)
         
         return ID
 
