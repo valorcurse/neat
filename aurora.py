@@ -71,7 +71,7 @@ class Aurora:
         self.autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
         # self.autoencoder.save_weights('basic.h5')
 
-    def refine(self, phenotypes, eval_env: Evaluation):
+    def refine(self, phenotypes, evaluate):
         # self.autoencoder.load_weights('basic.h5')
 
         last_loss = 1000.0
@@ -81,7 +81,7 @@ class Aurora:
         while loss <= last_loss:
             last_loss = loss
 
-            _, states = eval_env.evaluate(phenotypes)
+            _, states = evaluate(phenotypes)
 
             ten_percent = max(1, int(states.shape[0] * 0.25))
 

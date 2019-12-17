@@ -108,46 +108,44 @@ class FeedforwardCUDA(object):
             )
 
 
-        all_results = []
-        all_adjs = zip(np.array([p.adjacency_matrix for p in self.phenotypes]), X, self.phenotypes)
 
-        # Split the phenotypes by adjacency matrix size, otherwise CUDA complains
-        split_adjs = [list(g) for _, g in itertools.groupby(all_adjs, lambda a: a[0].shape)]
+        adj_matrices = [p.adjacency_matrix for p in self.phenotypes]
+        acts = [p.activations for p in phenotypes]
+        bias = [p.bias for p in phenotypes]
 
-        for adjs_inputs in split_adjs:
-            adjs = np.array([i[0] for i in adjs_inputs])
-            x = np.array([i[1] for i in adjs_inputs])
-            phenotypes = np.array([i[2] for i in adjs_inputs])
+        largest_adj_size = max([n.shape[0] for n in adj_matrices])
+
+        # Pad all matrices ti conform with the largest network
+        for i, (adj, act, bia) in enumerate(zip(adj_matrices, acts, bias)):
+            new_size = largest_adj_size - adj.shape[0]
+
+            adj_matrices[i] = np.pad(adj, [(0, new_size), (0, new_size)], mode='constant')
+            acts[i] = np.pad(act, [(0, new_size)], mode='constant')
+            bias[i] = np.pad(bia, [(0, new_size)], mode='constant')
+
+        adj_matrices = np.array(adj_matrices, dtype=np.float32)
+        acts = np.array(acts, dtype=np.int32)
+        bias = np.array(bias, dtype=np.float32)
+
+        mem = np.array([np.zeros(largest_adj_size, dtype=np.float32) for _ in phenotypes])
+
+        # Copy inputs to mem
+        for row_i, row in enumerate(mem):
+            row[:X.shape[1]] = X[row_i]
 
 
-            mem = np.array([np.zeros(adjs.shape[1], dtype=np.float32) for _ in adjs])
+        results = np.array([np.zeros(self.num_of_outputs, dtype=np.float32) for _ in adj_matrices])
 
-            # Copy inputs to mem
-            for row_i, row in enumerate(mem):
-                row[:x.shape[1]] = x[row_i]
+        cuda_mem = cuda.to_device(mem)
+        cuda_adj = cuda.to_device(adj_matrices)
+        cuda_acts = cuda.to_device(acts)
+        cuda_bias = cuda.to_device(bias)
+        cuda_results = cuda.to_device(results)
 
-            acts = np.array([p.activations for p in phenotypes])
-            bias = np.array([p.bias for p in phenotypes])
-            results = np.array([np.zeros(self.num_of_outputs, dtype=np.float32) for _ in adjs])
+        execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_results)
+        results = cuda_results.copy_to_host()
 
-            cuda_mem = cuda.to_device(mem)
-            cuda_adj = cuda.to_device(adjs)
-            cuda_acts = cuda.to_device(acts)
-            cuda_bias = cuda.to_device(bias)
-            cuda_results = cuda.to_device(results)
-
-            execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_results)
-            results = cuda_results.copy_to_host()
-
-            # print(mem)
-            # mem = cuda_mem.copy_to_host()
-            # print(mem)
-            # print("------------------------")
-            self.mem = mem
-
-            all_results.append(results)
-
-        return np.vstack(all_results)
+        return results
 
 
 class SubstrateCUDA(object):

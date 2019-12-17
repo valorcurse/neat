@@ -37,21 +37,14 @@ class Population:
         self.numOfInputs = configuration.n_inputs
         self.numOfOutputs = configuration.n_outputs
 
-    # def initiate(self, neurons: List[NeuronGene], links: List[LinkGene], numOfInputs: int, numOfOutputs: int, parents=[]):
-    	
-    # 	self.numOfInputs = numOfInputs
-    # 	self.numOfOutputs = numOfOutputs
-
-    # 	for i in range(self.populationSize):
-    #         genome = self.newGenome(neurons, links)
-    #         genome.parents = [genome]
-
     def population(self):
         pass
 
-    def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):
-    	
+    def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
+
+
         genome = Genome(self.currentGenomeID, self.numOfInputs, self.numOfOutputs, self.innovations, neurons, links, parents)
+        genome.parents = parents if len(parents) > 0 else [genome, genome]
         self.genomes.append(genome)
         self.currentGenomeID += 1
 

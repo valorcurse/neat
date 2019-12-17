@@ -5,21 +5,16 @@ from typing import List, Dict, Optional, Any
 from icontract import invariant, require
 
 
-import random
-import itertools
-from queue import Queue
-
-
-
-
 import math
+import random
 import numpy as np
 import networkx as nx
 from numba import jit
+from copy import deepcopy
 
 import neat.phenotypes
 from neat.neatTypes import NeuronType
-from neat.innovations import Innovations, Innovation
+from neat.innovations import Innovations
 from neat.utils import fastCopy
 
 class Species:
@@ -41,27 +36,17 @@ class FuncsEnum(Enum):
     leakyRelu = 4
 
 
-# activations = [
-#     lambda x: 1.0 / (1.0 + math.exp(-x)),   # Sigmoid
-#     lambda x: np.tanh(x),                   # Tanh
-#     lambda x: np.maximum(x, 0),             # ReLu
-#     lambda x: x if x > 0.0 else x * 0.01,   # Leaky ReLu
-#     lambda x: np.sin(x),                    # Sin
-#     lambda x: np.cos(x)                     # Cos
-# ]
-
-
 class MutationRates:
     def __init__(self) -> None:
         self.crossoverRate = 0.3
 
-        self.newSpeciesTolerance = 3.0
+        self.newSpeciesTolerance = 1.0
 
         self.chanceToMutateBias = 0.7
 
-        self.chanceToAddNeuron = 0.2
+        self.chanceToAddNeuron = 0.05
         # self.chanceToAddNeuron = 0.5
-        self.chanceToAddLink = 0.5
+        self.chanceToAddLink = 0.15
         # self.chanceToAddLink = 0.8
 
         self.chanceToAddRecurrentLink = 0.05
@@ -75,22 +60,6 @@ class MutationRates:
         self.maxWeightPerturbation = 0.5
 
         self.mpcMargin = 20
-
-
-# class DummyInnovations(Innovations):
-#     def __init__(self) -> None:
-#         self.listOfInnovations: List[Innovation] = []
-#         self.innovationNumber = 0
-#         self.currentNeuronID = 1
-#
-#     def createNewLinkInnovation(self, fromID: int, toID: int) -> int:
-#         self.innovationNumber += 1
-#         return self.innovationNumber;
-#
-#
-#     def createNewNeuronInnovation(self, neuronType: NeuronType, fromID: Optional[int], toID: Optional[int]) -> int:
-#         self.innovationNumber += 1
-#         return self.innovationNumber;
 
 class NeuronGene:
     def __init__(self, neuronType: NeuronType, ID: int, y: float, x: float = 0.0) -> None:
@@ -202,6 +171,8 @@ class Genome:
         else:
             self.neurons = fastCopy(neurons)
 
+        self.data = {}
+
         self.fitness: float = -1000.0
         self.adjustedFitness: float = -1000.0
         self.novelty: float = -1000.0
@@ -222,6 +193,7 @@ class Genome:
 
     def __deepcopy__(self, memodict={}):
         copy_object = Genome(self.ID, self.inputs, self.outputs, self.innovations, self.neurons, self.links, self.parents)
+        copy_object.data = deepcopy(self.data)
         return copy_object
 
     def getLinksIn(self, neuron: NeuronGene) -> List[LinkGene]:
@@ -240,18 +212,18 @@ class Genome:
         disjointRate = 1.0
         matchedRate = 0.4
 
+        n_genes = max(len(other.neurons) + len(other.links), len(self.neurons) + len(self.links))
+
         own_links = set(l for l in self.links)
         other_links = set(l for l in other.links)
         disjoint_links = (own_links - other_links).union(other_links - own_links)
         
-        longestLinks = max(1.0, max(len(other.links), len(self.links)))
-
         intersecting_neurons = list(zip(own_links.intersection(other_links), other_links.intersection(own_links)))
-        weightDifference = 0.0
+        weight_difference = 0.0
         for left, right in intersecting_neurons:
-            weightDifference += math.fabs(left.weight - right.weight)
+            weight_difference += math.fabs(left.weight - right.weight)
 
-        linkDistance = (disjointRate * len(disjoint_links) / longestLinks) + weightDifference * matchedRate
+        linkDistance = (disjointRate * len(disjoint_links) / n_genes) + weight_difference * matchedRate
 
         own_neurons = set(n.ID for n in self.neurons)
         other_neurons = set(n.ID for n in other.neurons)
@@ -259,16 +231,16 @@ class Genome:
         # Difference between both sets
         disjoint_neurons = (own_neurons - other_neurons).union(other_neurons - own_neurons)
 
-        longestNeurons = max(1.0, max(len(other.neurons), len(self.neurons)))
-
-        neuronDistance = (disjointRate * len(disjoint_neurons) / longestNeurons)
+        neuronDistance = (disjointRate * len(disjoint_neurons) / n_genes)
 
         distance: float = linkDistance + neuronDistance
         self.distance = distance
         
         return distance
 
-    def addRandomLink(self) -> None:
+    def addRandomLink(self, mutationRates) -> None:
+        if (random.random() > mutationRates.chanceToAddLink):
+            return
 
         fromNeuron: Optional[NeuronGene] = None
         toNeuron: Optional[NeuronGene] = None
@@ -312,8 +284,8 @@ class Genome:
         return link
 
 
-    def removeRandomLink(self) -> None:
-        if (len(self.links) == 0):
+    def removeRandomLink(self, mutationRates) -> None:
+        if len(self.links) == 0 or random.random() > mutationRates.chanceToAddLink:
             return
 
         randomLink = random.choice(self.links)
@@ -359,9 +331,9 @@ class Genome:
 
         return newNeuron
 
-    def addRandomNeuron(self) -> None:
+    def addRandomNeuron(self, mutationRates) -> None:
 
-        if (len(self.links) == 0):
+        if len(self.links) == 0 or random.random() > mutationRates.chanceToAddNeuron:
             return
 
         random_link = random.choice(self.links)
@@ -413,18 +385,29 @@ class Genome:
 
 
     def mutate(self, mutationRates: MutationRates) -> None:
-        if (random.random() < mutationRates.chanceToAddNeuron):
-            self.addRandomNeuron()
+
+        mutation_functions = [lambda: self.addRandomNeuron(mutationRates),
+                              lambda: self.addRandomLink(mutationRates),
+                              lambda: self.removeRandomLink(mutationRates),
+                              lambda: self.mutateWeights(mutationRates),
+                              lambda: self.mutateBias(mutationRates)]
+
+        rand = random.randint(0, len(mutation_functions) - 1)
+        mutation_functions[rand]()
 
 
-        if (random.random() < mutationRates.chanceToAddLink):
-            self.addRandomLink()
-
+        # if (random.random() < mutationRates.chanceToAddNeuron):
+        #     self.addRandomNeuron()
+        #
+        #
+        # if (random.random() < mutationRates.chanceToAddLink):
+        #     self.addRandomLink()
+        #
         # if (random.random() < 1.0 - mutationRates.chanceToAddLink):
         #     self.removeRandomLink()
-
-        self.mutateWeights(mutationRates)
-        self.mutateBias(mutationRates)
+        #
+        # self.mutateWeights(mutationRates)
+        # self.mutateBias(mutationRates)
         # self.mutateActivation(mutationRates)
         # self.mutateActivation(mutationRates)
 

@@ -2,23 +2,21 @@ from typing import List, Tuple
 from icontract import require
 
 import numpy as np
-import scipy as sp
 import pygmo as pg
-from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
-import seaborn as sns
 import random
+import math
 
 from copy import deepcopy
 
-import neat.genes as genes
+# import neat.genes as genes
+from neat.utils import debug_print
 from neat.aurora import Aurora
-from neat.utils import fastCopy
-from neat.visualize import Visualize
 from neat.evaluation import Evaluation
 from neat.innovations import Innovations
 from neat.population import PopulationUpdate
 from neat.noveltySearch import NoveltySearch
+from neat.genes import NeuronGene, LinkGene, MutationRates
 from neat.population import PopulationConfiguration
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
@@ -40,7 +38,7 @@ class MOUpdate(SpeciesUpdate):
 
 class MOPopulation(SpeciatedPopulation):
 
-    def __init__(self, configuration: SpeciesConfiguration, innovations: Innovations, mutationRates: genes.MutationRates):
+    def __init__(self, configuration: SpeciesConfiguration, innovations: Innovations, mutationRates: MutationRates):
         super().__init__(configuration, innovations, mutationRates)
 
         encoding_dim = 8
@@ -53,6 +51,14 @@ class MOPopulation(SpeciatedPopulation):
         self.novelty_search = NoveltySearch(encoding_dim)
 
         self.use_local_competition = False
+
+    def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):
+
+        genome = super().newGenome(neurons, links, parents)
+        genome.data['rank'] = 0
+        genome.data['crowding_distance'] = 0
+
+        return genome
 
     @require(lambda update: isinstance(update, MOUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
@@ -83,7 +89,7 @@ class MOPopulation(SpeciatedPopulation):
         space_to_fill = int(self.population_size/2)
         space_left = space_to_fill
         i = 0
-        while(space_left > 0):
+        while (space_left > 0):
             front_genomes = [self.genomes[j] for j in ndf[i]]
             front_points = [points[j] for j in ndf[i]]
             front_ranks = [ndr[j] for j in ndf[i]]
@@ -91,8 +97,8 @@ class MOPopulation(SpeciatedPopulation):
 
             crowding_distances = pg.crowding_distance(front_points) if len(front_points) > 1 else np.zeros((len(front_points)))
             for g, d, r in zip(front_genomes, crowding_distances, front_ranks):
-                g.crowding_distance = d
-                g.rank = r
+                g.data['crowding_distance'] = d
+                g.data['rank'] = r
 
             genomes_to_take = min(len(front_genomes), space_left)
 
@@ -106,76 +112,37 @@ class MOPopulation(SpeciatedPopulation):
         assert len(nd_genomes) == space_to_fill, \
                "Only {}/{} genomes were copied.".format(len(nd_genomes), space_to_fill)
 
-
-
         self.genomes = nd_genomes
-        self.speciate()
+        for s in self.species:
+            s.members = []
 
-        # nd_indexes = np.array(ndf[:i]).flatten()
+        for g in self.genomes:
+            self.speciate(g)
+
+        for s in [s for s in self.species if len(s.members) == 0]:
+            self.species.remove(s)
+
         nd_indexes = [a for l in ndf[:i] for a in l]
         update.fitness = np.array([update.fitness[i] for i in nd_indexes], dtype=np.float32)
         update.behaviors = np.array([update.behaviors[i] for i in nd_indexes], dtype=np.float32)
-
-        # novelties = np.array([novelties[i] for i in nd_indexes], dtype=np.float32)
-        # update.fitness = novelties
 
         super().updatePopulation(update)
 
         self.epochs += 1
 
-    def newGeneration(self) -> None:
+    def tournament_selection(self, genomes):
+        return sorted(genomes, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))[0]
 
-        newPop = []
-        for s in self.species:
-            # s.members.sort(reverse=True, key=lambda x: x.fitness)
-
-            newPop.extend(s.members)
-
-            # topPercent = int(math.ceil(0.01 * len(s.members)))
-            # Grabbing the top 2 performing genomes
-            # for topMember in s.members[:topPercent]:
-            #     newPop.append(topMember)
-            #     s.numToSpawn -= 1
-
-            # Only use the survival threshold fraction to use as parents for the next generation.
-            # cutoff = int(math.ceil(0.1 * len(s.members)))
-            # Use at least two parents no matter what the threshold fraction result is.
-            # cutoff = max(cutoff, 2)
-            # s.members = s.members[:cutoff]
-
-            for i in range(s.numToSpawn - len(s.members)):
-                baby: genes.Genome = None
-
-                if random.random() > self.mutationRates.crossoverRate:
-                    member = random.choice(s.members)
-                    # baby = fastCopy(member)
-                    baby = deepcopy(member)
-                    baby.mutate(self.mutationRates)
-                else:
-                    # Tournament selection
-                    randomMembers = lambda: [random.choice(s.members) for _ in range(2)]
-                    g1 = sorted(randomMembers(), key=lambda x: (x.rank, -x.crowding_distance))[0]
-                    g2 = sorted(randomMembers(), key=lambda x: (x.rank, -x.crowding_distance))[0]
-
-                    baby = self.crossover(g1, g2)
-
-                self.currentGenomeID += 1
-                baby.ID = self.currentGenomeID
-
-                newPop.append(baby)
-
-        self.genomes = newPop
-
-    def refine_behaviors(self, eval_env: Evaluation):
+    def refine_behaviors(self, evaluate):
         plt.figure(1)
         plt.clf()
 
         phenotypes = self.create_phenotypes()
         print("Refining AURORA...")
-        self.aurora.refine(phenotypes, eval_env)
+        self.aurora.refine(phenotypes, evaluate)
         print("Done.")
 
-        fitnesses, states = eval_env.evaluate(phenotypes)
+        fitnesses, states = evaluate(phenotypes)
 
         print("Re-characterizing archived genomes...")
         features = self.aurora.characterize(states)

@@ -1,5 +1,6 @@
 import pickle
-import numpy as np
+import os
+from inspect import currentframe, getframeinfo, stack
 
 def find(f, seq):
     """Return first item in sequence where f(item) == True."""
@@ -21,3 +22,9 @@ class Singleton(type):
         if cls not in cls._instances:
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
+
+
+def debug_print(message):
+    caller = getframeinfo(stack()[1][0])
+    base = os.path.basename(caller.filename)
+    print("{}:{} - {}".format(base, caller.lineno, message))

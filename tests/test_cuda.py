@@ -8,11 +8,11 @@ import networkx as nx
 def test_single_edges():
     G = nx.DiGraph()
     G.add_nodes_from([
-        (10, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(-1.0, -1.0)}),
-        (20, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(0.0, -1.0)}),
-        (30, {"activation": np.tanh, "type": NeuronType.INPUT, "pos":(1.0, -1.0)}),
-        (60, {"activation": np.tanh, "type": NeuronType.OUTPUT, "pos":(-1.0, 1.0)}),
-        (70, {"activation": np.tanh, "type": NeuronType.OUTPUT, "pos":(1.0, 1.0)})
+        (10, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(-1.0, -1.0)}),
+        (20, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(0.0, -1.0)}),
+        (30, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(1.0, -1.0)}),
+        (60, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias":0.0, "pos":(-1.0, 1.0)}),
+        (70, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias":0.0, "pos":(1.0, 1.0)})
     ])
 
     G.add_weighted_edges_from([

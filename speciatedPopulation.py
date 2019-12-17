@@ -1,14 +1,15 @@
 from typing import List, Tuple
 
 import neat.genes as genes
-from neat.utils import fastCopy
+from neat.genes import Genome, NeuronGene, LinkGene
 from neat.innovations import Innovations
+from neat.utils import fastCopy, debug_print
 from neat.population import Population, PopulationConfiguration, PopulationUpdate
 
 import math
 import random
 import numpy as np
-from copy import deepcopy
+from copy import deepcopy, copy
 from icontract import require
 
 
@@ -56,26 +57,14 @@ class Species:
         return random.choice(self.members)
 
     def adjustFitnesses(self) -> None:
-        # avgMilestone = np.average([m.milestone for m in self.members])
-        
-        # self.members = [m for m in self.members if m.milestone >= avgMilestone]
-
         for m in self.members:
             m.adjustedFitness = m.fitness / len(self.members)
 
-            # if self.age <= self.youngAgeThreshold:
-            #     m.adjustedFitness *= self.youngAgeBonus
 
-            # if self.age >= self.oldAgeThreshold:
-            #     m.adjustedFitness *= self.oldAgePenalty
-
-    def becomeOlder(self, alone: bool) -> None:
+    def becomeOlder(self) -> None:
         self.age += 1
 
         highestFitness = max([m.fitness for m in self.members])
-
-        if alone:
-            return
 
         # Check if species is stagnant
         if (highestFitness < self.highestFitness):
@@ -126,6 +115,7 @@ class SpeciatedPopulation(Population):
         for i in range(self.population_size - 1):
             newGenome = fastCopy(baseGenome)
             newGenome.ID = self.currentGenomeID
+            firstSpecies.addMember(newGenome)
             self.genomes.append(newGenome)
             self.currentGenomeID += 1
 
@@ -134,7 +124,7 @@ class SpeciatedPopulation(Population):
         #     for _ in range(50):
         #         g.mutate(mutationRates)
 
-        self.speciate()
+        # self.speciate()
 
     def __len__(self):
         return len(self.genomes)
@@ -149,104 +139,72 @@ class SpeciatedPopulation(Population):
             genome.fitness = update.fitness[index]
 
     def calculateSpawnAmount(self) -> None:
-        # Remove stagnant species
+        # Age species and remove stagnant species
         for s in self.species:
-            s.becomeOlder(len(self.species) == 1)
+            if len(self.species) > 1:
+                s.becomeOlder()
 
-            if s.stagnant and len(self.species) > 1:
-                self.species.remove(s)
+                if s.stagnant and len(self.species) > 1:
+                    self.species.remove(s)
         
         for s in self.species:
             s.adjustFitnesses()
 
-        # equal_portion = 0.8
-        equal_portion = int(self.population_size*0.8)
-        equal_amount = int(equal_portion/len(self.species))
-        merit_portion = self.population_size - equal_portion
-        allFitnesses = sum([m.adjustedFitness for spc in self.species for m in spc.members])
+        half_pop = int(self.population_size / 2)
+        shared_pop = int(half_pop / len(self.species))
+
+        fitnesses = [np.array([m.adjustedFitness for m in s.members]) for s in self.species]
+        print(fitnesses)
+        total_fitnesses = 0.0
+        for i, f in enumerate(fitnesses):
+            min = np.min(f)
+            fitnesses[i] = np.sum(f - min)
+            total_fitnesses += np.sum(f - min)
+
+
+
+        for i, s in enumerate(self.species):
+            spawn_portion = fitnesses[i]/total_fitnesses
+            s.numToSpawn = shared_pop + int(spawn_portion * half_pop)
+            print("Species {} - Total fitness {} - To spawn {} - Portion to spawn: {}".format(s.ID, fitnesses[i], s.numToSpawn, spawn_portion))
+
+    def speciate(self, genome) -> None:
+
+        if random.random() > 0.1:
+            random.choice(genome.parents).species.addMember(genome)
+            return
+
+        species = None
         for s in self.species:
-            sumOfFitnesses: float = sum([m.adjustedFitness for m in s.members])
+            distance = genome.calculateCompatibilityDistance(s.leader)
 
-            portionOfFitness: float = 1.0 if allFitnesses == 0.0 and sumOfFitnesses == 0.0 else sumOfFitnesses/allFitnesses
-            s.numToSpawn = equal_amount +  int(merit_portion * portionOfFitness)
+            if distance <= self.mutationRates.newSpeciesTolerance:
+                species = s
+                break
 
-    def speciate(self) -> None:
+        if species is None:
+            self.speciesNumber += 1
+            self.species.append(Species(self.speciesNumber, genome))
+            print("Creating new species %d" % self.speciesNumber)
+        else:
+            species.addMember(genome)
 
-        # Find best leader for species from the new population
-        unspeciated = list(range(0, len(self.genomes)))
-        for s in self.species:
-            compareMember = s.leader
-
-            s.members = []
-
-            candidates: List[Tuple[float, int]] = []
-            for i in unspeciated:
-                genome = self.genomes[i]
-
-                distance = genome.calculateCompatibilityDistance(compareMember)
-
-                if (distance < max(self.mutationRates.newSpeciesTolerance, self.averageInterspeciesDistance)):
-                    candidates.append((distance, i))
-
-            if len(candidates) == 0:
-                self.species.remove(s)
-                continue
-
-            _, bestCandidate = min(candidates, key=lambda x: x[0])
-
-            s.leader = self.genomes[bestCandidate]
-            s.members.append(s.leader)
-            unspeciated.remove(bestCandidate)
-
-        # Distribute genomes to their closest species
-        for i in unspeciated:
-            genome = self.genomes[i]
-
-            closestDistance = self.mutationRates.newSpeciesTolerance
-            # closestDistance = max(self.mutationRates.newSpeciesTolerance, self.averageInterspeciesDistance)
-            closestSpecies = None
-            for s in self.species:
-                distance = genome.calculateCompatibilityDistance(s.leader)
-                # If genome falls within tolerance of species
-                if (distance < closestDistance):
-                    closestDistance = distance
-                    closestSpecies = s
-
-            if (closestSpecies is not None): # If found a compatible species
-                # closestSpecies.members.append(genome)
-                closestSpecies.addMember(genome)
-
-            else: # Else create a new species
-                # chance: float = random.random()
-
-                # parentSpecies: Optional[Species] = random.choice(genome.parents).species
-
-                # if (chance >= 0.1) and parentSpecies is not None:
-                #     parentSpecies.addMember(genome)
-                # else:
-                self.speciesNumber += 1
-                self.species.append(Species(self.speciesNumber, genome))
-                print("Creating new species %d"%self.speciesNumber)
-
-        # Calculate average interspecies distance
-        if len(self.species) > 1:
-            totalDistance: float = 0.0
-            for s in self.species:
-                randomSpecies: Species = random.choice([r for r in self.species if r is not s])
-
-                totalDistance += s.leader.calculateCompatibilityDistance(randomSpecies.leader)
-            
-            # self.averageInterspeciesDistance = max(self.mutationRates.newSpeciesTolerance, (totalDistance/len(self.species)))
-
-            # print("averageInterspeciesDistance: " + str(self.averageInterspeciesDistance))
+    def tournament_selection(self, genomes):
+        return sorted(genomes, key=lambda x: x.fitness)[0]
 
     def newGeneration(self) -> None:
+
+        for s in self.species:
+            s.leader = random.choice(s.members)
+            # s.members = []
 
         newPop = []
         for s in self.species:
             # s.members.sort(reverse=True, key=lambda x: x.fitness)
 
             newPop.extend(s.members)
+
+            reproduction_members = copy(s.members)
 
             # topPercent = int(math.ceil(0.01 * len(s.members)))
             # Grabbing the top 2 performing genomes
@@ -260,27 +218,39 @@ class SpeciatedPopulation(Population):
             # cutoff = max(cutoff, 2)
             # s.members = s.members[:cutoff]
 
+            # Generate new baby genome
             for i in range(s.numToSpawn - len(s.members)):
                 baby: genes.Genome = None
 
                 if random.random() > self.mutationRates.crossoverRate:
-                    member = random.choice(s.members)
+                    member = random.choice(reproduction_members)
                     baby = deepcopy(member)
                     baby.mutate(self.mutationRates)
                 else:
+
                     # Tournament selection
-                    # randomMembers = lambda: [random.choice(s.members) for _ in range(5)]
+
+                    randomMembers = lambda: [random.choice(reproduction_members) for _ in range(5)]
+                    g1 = self.tournament_selection(randomMembers())
+                    g2 = self.tournament_selection(randomMembers())
+
                     # g1 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
                     # g2 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
 
-                    # baby = self.crossover(g1, g2)
-
-                    baby = self.crossover(random.choice(s.members), random.choice(s.members))
+                    baby = self.crossover(g1, g2)
 
                 self.currentGenomeID += 1
                 baby.ID = self.currentGenomeID
 
+                # Find species for new baby
+                self.speciate(baby)
+
+
                 newPop.append(baby)
+
+        #  Remove empty species
+        for s in [s for s in self.species if len(s.members) == 0]:
+            self.species.remove(s)
 
         self.genomes = newPop
 
@@ -292,7 +262,5 @@ class SpeciatedPopulation(Population):
         self.newGeneration()
 
         print("Number of genomes: %d"%len(self.genomes))
-
-        self.speciate()
 
         return self.genomes

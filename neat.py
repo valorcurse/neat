@@ -16,7 +16,7 @@ from neat.population import PopulationConfiguration, Population
 
 class NEAT:
 
-    def __init__(self, eval_env: Evaluation, population_configuration: PopulationConfiguration, mutation_rates: MutationRates=MutationRates()) -> None:
+    def __init__(self, eval_env, population_configuration: PopulationConfiguration, mutation_rates: MutationRates=MutationRates()) -> None:
 
         self.population_configuration = population_configuration
         self.innovations = neat.innovations.Innovations()
@@ -48,7 +48,7 @@ class NEAT:
             self.population = MOPopulation(population_configuration, self.innovations, mutation_rates)
 
         # Passed function that runs the evaluation environment
-        self.eval_env: Evaluation = eval_env
+        self.eval_env = eval_env
 
     def evaluate_vectorized(self, phenotypes) -> Tuple[np.ndarray, np.ndarray]:
         all_features = np.empty((0, self.population_configuration.behavior_dimensions))
@@ -83,7 +83,8 @@ class NEAT:
             self.epochs += 1
 
             if self.epochs in self.refinement_epochs:
-                self.population.refine_behaviors(self.eval_env)
+                # self.population.refine_behaviors(self.eval_env)
+                self.population.refine_behaviors(self.evaluate_vectorized)
 
             self.phenotypes = self.population.create_phenotypes()
             fitnesses, states = self.evaluate_vectorized(self.phenotypes)
