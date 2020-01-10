@@ -40,7 +40,7 @@ class Population:
     def population(self):
         pass
 
-    def newGenome(self, neurons: List[NeuronGene], links: List[LinkGene], parents=[]):
+    def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):
 
 
         genome = Genome(self.currentGenomeID, self.numOfInputs, self.numOfOutputs, self.innovations, neurons, links, parents)
@@ -54,10 +54,10 @@ class Population:
         pass
 
     def crossover(self, mum: Genome, dad: Genome) -> Genome:
-        
-        best = None
+
 
         # If both parents perform equally, choose the simpler one
+        best = None
         if (mum.fitness == dad.fitness):
             if (len(mum.links) == len(dad.links)):
                 best = random.choice([mum, dad])
@@ -69,29 +69,19 @@ class Population:
         # Copy input and output neurons
         babyNeurons = [n for n in best.neurons if (n.neuronType != phenos.NeuronType.HIDDEN)]
 
-        combinedIndexes = list(set(
-            [l.ID for l in mum.links] + [l.ID for l in dad.links]))
-        combinedIndexes.sort()
-        
-        mumDict: Dict[int, LinkGene] = {l.ID: l for l in mum.links}
-        dadDict: Dict[int, LinkGene] = {l.ID: l for l in dad.links}
+        mum_links = set(l for l in mum.links)
+        dad_links = set(l for l in dad.links)
+
+        matching_links = list(zip(mum_links.intersection(dad_links), dad_links.intersection(mum_links)))
 
         # Crossover the links
         babyLinks: List[LinkGene] = []
-        for i in combinedIndexes:
-            mumLink: Optional[LinkGene] = mumDict.get(i)
-            dadLink: Optional[LinkGene] = dadDict.get(i)
-            
-            if (mumLink is None):
-                if (dadLink is not None and best == dad):
-                    babyLinks.append(dadLink)
+        for links in matching_links:
+            babyLinks.append(random.choice(links))
 
-            elif (dadLink is None):
-                if (mumLink is not None and best == mum):
-                    babyLinks.append(mumLink)
+        most_fit_disjoint_links = mum_links - dad_links if best == mum else dad_links - mum_links
+        babyLinks += list(most_fit_disjoint_links)
 
-            else:
-                babyLinks.append(random.choice([mumLink, dadLink]))
 
         # Copy the neurons connected to the crossedover links
         for link in babyLinks:

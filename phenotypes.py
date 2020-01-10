@@ -214,8 +214,11 @@ def feedForward(adj, acts, bias, mem):
 
     for m_i in range(mem.shape[0]):
         # m = mem[m_i]
-        # if mem[m_i] != 0.0:
+        if mem[m_i] != 0.0:
+            continue
         #     sum = mem[m_i]
+
+        function = acts[m_i]
 
         weights = adj_t[m_i].T
         sum = 0.0 if mem[m_i] == 0.0 else mem[m_i]
@@ -226,11 +229,14 @@ def feedForward(adj, acts, bias, mem):
             if weight == 0.0 or input == 0.0:
                 continue
 
-            sum += input*weight
+            if function == 6:
+                sum = max(sum, input*weight)
+            else:
+                sum += input*weight
 
         # if added == 0.0: continue
 
-        function = acts[m_i]
+
         sum += bias[m_i]
         if function == 0:
             mem[m_i] = math.tanh(sum)
@@ -243,6 +249,8 @@ def feedForward(adj, acts, bias, mem):
             mem[m_i] = 1 / (1 + math.exp(-sum))
         elif function == 4:
             mem[m_i] = sum if sum > 0.0 else sum * 0.01  # Leaky ReLu
+        elif function == 5:
+            mem[m_i] = sum  # Linear
 
 @cuda.jit()
 def calc_substrate(X, Y, adj, acts, mems, results):

@@ -34,30 +34,29 @@ class FuncsEnum(Enum):
     cos = 2
     sigmoid = 3
     leakyRelu = 4
+    linear = 5
+    maxout = 6
 
 
 class MutationRates:
     def __init__(self) -> None:
+
+        self.newSpeciesTolerance = 0.25
+
+
         self.crossoverRate = 0.3
+        self.chanceToAddNeuron = 0.01
+        self.chanceToAddLink = 0.05
 
-        self.newSpeciesTolerance = 1.0
-
-        self.chanceToMutateBias = 0.7
-
-        self.chanceToAddNeuron = 0.05
-        # self.chanceToAddNeuron = 0.5
-        self.chanceToAddLink = 0.15
-        # self.chanceToAddLink = 0.8
-
-        self.chanceToAddRecurrentLink = 0.05
-
-        self.chanceToDeleteNeuron = 0.05
-        self.chanceToDeleteLink = 0.4
-
-        self.chanceToMutateWeight = 0.8
         self.mutationRate = 0.9
+        self.chanceToMutateWeight = 0.8
+        self.chanceToMutateBias = 0.0
+        self.chanceToMutateActivation = 0.0
+
+        self.chanceToDeleteLink = 0.0
+
         self.probabilityOfWeightReplaced = 0.1
-        self.maxWeightPerturbation = 0.5
+        self.maxWeightPerturbation = 1.0
 
         self.mpcMargin = 20
 
@@ -70,12 +69,12 @@ class NeuronGene:
         self.y = y
         self.x = x
         
-        # self.activation = self.tanh
+        # self.activation = self.relu
         self.activation = self.leakyRelu
         self.bias = 0.0
 
         # self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
-        self.activations = [self.sigmoid, self.tanh, self.sin, self.cos, self.leakyRelu]
+        self.activations = [self.sigmoid, self.tanh, self.sin, self.cos, self.leakyRelu, self.linear]
 
     def __repr__(self):
         return "NeuronGene(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
@@ -118,6 +117,16 @@ class NeuronGene:
     @jit
     def gaussian(x: float) -> float:
         return math.exp((-x)**2)
+
+    @staticmethod
+    @jit
+    def linear(x: float) -> float:
+        return x
+
+    @staticmethod
+    @jit
+    def maxout(x: float) -> float:
+        return x
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and self.ID == other.ID
@@ -165,9 +174,9 @@ class Genome:
 
         if len(self.neurons) == 0:
             for _ in range(self.inputs):
-                self._addNeuron(NeuronType.INPUT)
+                self._addNeuron(NeuronType.INPUT).activation = NeuronGene.linear
             for _ in range(self.outputs):
-                self._addNeuron(NeuronType.OUTPUT)
+                self._addNeuron(NeuronType.OUTPUT).activation = NeuronGene.tanh
         else:
             self.neurons = fastCopy(neurons)
 
@@ -218,12 +227,13 @@ class Genome:
         other_links = set(l for l in other.links)
         disjoint_links = (own_links - other_links).union(other_links - own_links)
         
-        intersecting_neurons = list(zip(own_links.intersection(other_links), other_links.intersection(own_links)))
+        intersecting_links = list(zip(own_links.intersection(other_links), other_links.intersection(own_links)))
         weight_difference = 0.0
-        for left, right in intersecting_neurons:
+        for left, right in intersecting_links:
             weight_difference += math.fabs(left.weight - right.weight)
 
-        linkDistance = (disjointRate * len(disjoint_links) / n_genes) + weight_difference * matchedRate
+        # linkDistance = (disjointRate * len(disjoint_links) / n_genes) + weight_difference * matchedRate
+        linkDistance = (disjointRate * len(disjoint_links) / n_genes)
 
         own_neurons = set(n.ID for n in self.neurons)
         other_neurons = set(n.ID for n in other.neurons)
@@ -238,9 +248,9 @@ class Genome:
         
         return distance
 
-    def addRandomLink(self, mutationRates) -> None:
+    def addRandomLink(self, mutationRates) -> bool:
         if (random.random() > mutationRates.chanceToAddLink):
-            return
+            return False
 
         fromNeuron: Optional[NeuronGene] = None
         toNeuron: Optional[NeuronGene] = None
@@ -268,14 +278,16 @@ class Genome:
             if link is not None:
                 if link.enabled == False:
                     link.enabled = True
-                    return
+                    return True
                 else:
                     continue
             else:
                 self.addLink(fromNeuron, toNeuron)
-                return
+                return True
 
-    def addLink(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, weight: float = 1.0) -> LinkGene:
+        return False
+
+    def addLink(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, weight: float = 0.0) -> LinkGene:
         ID = self.innovations.createNewLinkInnovation(fromNeuron.ID, toNeuron.ID)
 
         link = LinkGene(fromNeuron, toNeuron, ID, weight)
@@ -285,7 +297,7 @@ class Genome:
 
 
     def removeRandomLink(self, mutationRates) -> None:
-        if len(self.links) == 0 or random.random() > mutationRates.chanceToAddLink:
+        if len(self.links) == 0 or random.random() > mutationRates.chanceToDeleteLink:
             return
 
         randomLink = random.choice(self.links)
@@ -319,8 +331,6 @@ class Genome:
 
         newNeuron = NeuronGene(neuronType, ID, y)
 
-        # newNeuron = innovations.createNewNeuron(y, neuronType, fromNeuron, toNeuron)
-
         self.neurons.append(newNeuron)
 
         sameYNeurons = [n for n in self.neurons if n.y == y]
@@ -331,10 +341,10 @@ class Genome:
 
         return newNeuron
 
-    def addRandomNeuron(self, mutationRates) -> None:
+    def addRandomNeuron(self, mutationRates) -> bool:
 
         if len(self.links) == 0 or random.random() > mutationRates.chanceToAddNeuron:
-            return
+            return False
 
         random_link = random.choice(self.links)
 
@@ -349,40 +359,38 @@ class Genome:
 
         random_link.enabled = False
 
+        return True
 
-    def mutateWeights(self, mutationRates: MutationRates) -> None:
-            random_links = np.random.permutation(self.links)
-            for link in random_links:
-                if random.random() > mutationRates.chanceToMutateWeight:
-                    continue
+    def mutateWeights(self, mutationRates: MutationRates) -> bool:
+        if len(self.links) == 0 or random.random() > mutationRates.chanceToMutateWeight:
+            return False
 
-                if random.random() < mutationRates.mutationRate:
-                    # link.weight += random.gauss(0.0, mutationRates.maxWeightPerturbation)
-                    link.weight += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
-                else:
-                    link.weight += np.random.normal(0, 1, 1)[0]
-                    # link.weight = random.gauss(0.0, 1.0)
+        random_link = random.choice(self.links)
+        if random.random() > mutationRates.probabilityOfWeightReplaced:
+            random_link.weight += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
+        else:
+            random_link.weight = np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
 
-                return
+        return True
 
-    def mutateBias(self, mutationRates: MutationRates) -> None:
-            random_neurons = np.random.permutation(self.neurons)
-            for neuron in random_neurons:
+    def mutateBias(self, mutationRates: MutationRates) -> bool:
+        if random.random() > mutationRates.chanceToMutateBias:
+            return False
 
-                if random.random() < mutationRates.chanceToMutateBias:
-                    # link.weight += random.gauss(0.0, mutationRates.maxWeightPerturbation)
-                    neuron.bias += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
+        random_neuron = random.choice(self.neurons)
+        random_neuron.bias += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
 
-                return
+        return True
 
-    def mutateActivation(self, mutationRates: MutationRates) -> None:
+    def mutateActivation(self, mutationRates: MutationRates) -> bool:
+        if (random.random() > mutationRates.chanceToMutateActivation):
+            return False
+
         neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
-        for n in neurons:
-            if (random.random() > mutationRates.chanceToAddNeuron):
-                continue
+        random_neuron = random.choice(neurons)
+        random_neuron.activation = random.choice(random_neuron.activations)
 
-            n.activation = random.choice(n.activations)
-
+        return True
 
     def mutate(self, mutationRates: MutationRates) -> None:
 
@@ -390,26 +398,15 @@ class Genome:
                               lambda: self.addRandomLink(mutationRates),
                               lambda: self.removeRandomLink(mutationRates),
                               lambda: self.mutateWeights(mutationRates),
-                              lambda: self.mutateBias(mutationRates)]
+                              lambda: self.mutateBias(mutationRates),
+                              lambda: self.mutateActivation(mutationRates)]
 
-        rand = random.randint(0, len(mutation_functions) - 1)
-        mutation_functions[rand]()
+        mutation_successful = False
+        while len(mutation_functions) > 0 and not mutation_successful:
+            random_mutation = mutation_functions[random.randint(0, len(mutation_functions) - 1)]
+            mutation_successful = random_mutation()
 
-
-        # if (random.random() < mutationRates.chanceToAddNeuron):
-        #     self.addRandomNeuron()
-        #
-        #
-        # if (random.random() < mutationRates.chanceToAddLink):
-        #     self.addRandomLink()
-        #
-        # if (random.random() < 1.0 - mutationRates.chanceToAddLink):
-        #     self.removeRandomLink()
-        #
-        # self.mutateWeights(mutationRates)
-        # self.mutateBias(mutationRates)
-        # self.mutateActivation(mutationRates)
-        # self.mutateActivation(mutationRates)
+            mutation_functions.remove(random_mutation)
 
         self.links.sort()
 
@@ -417,13 +414,15 @@ class Genome:
     def createPhenotype(self) -> neat.phenotypes.Phenotype:
         from neat.phenotypes import SNeuron
         pheno_graph = nx.DiGraph()
-        dummy_graph = nx.DiGraph()
+        genome_graph = nx.DiGraph()
 
         neurons = fastCopy(self.neurons)
 
         for neuron in self.neurons:
-            dummy_graph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType, bias=neuron.bias, pos=(neuron.x, neuron.y))
+            # Add all nodes to the genome graph
+            genome_graph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType, bias=neuron.bias, pos=(neuron.x, neuron.y))
 
+            # Only add input/output nodes to the phenotype
             if neuron.neuronType != NeuronType.HIDDEN:
                 pheno_graph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType, bias=neuron.bias,
                                      pos=(neuron.x, neuron.y))
@@ -432,18 +431,19 @@ class Genome:
 
 
         for link in self.links:
-            dummy_graph.add_edge(link.fromNeuron.ID, link.toNeuron.ID, weight=link.weight)
+            genome_graph.add_edge(link.fromNeuron.ID, link.toNeuron.ID, weight=link.weight)
 
-        all_paths = set()
+        # Find all paths between every input and output node
         for input in [n for n in self.neurons if n.neuronType == NeuronType.INPUT]:
             for output in [n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]:
 
-                for path in nx.all_simple_paths(dummy_graph, source=input.ID, target=output.ID):
-                    for i in range(len(path) - 1):
-                        u = path[i]
-                        v = path[i+1]
-                        weight = dummy_graph.get_edge_data(u, v)['weight']
+                for nodes_in_path in nx.all_simple_paths(genome_graph, source=input.ID, target=output.ID):
+                    for i in range(len(nodes_in_path) - 1):
+                        u = nodes_in_path[i]
+                        v = nodes_in_path[i+1]
+                        weight = genome_graph.get_edge_data(u, v)['weight']
 
+                        # If this node hasn't been found before, add it
                         if not pheno_graph.has_node(v):
                             found_neuron = next((n for n in neurons if n.ID == v), None)
 
@@ -453,69 +453,11 @@ class Genome:
                                                  bias=found_neuron.bias,
                                                  pos=(found_neuron.x, found_neuron.y))
 
+                        # If this edge hasn't been added yet, do it
                         if not pheno_graph.has_edge(u ,v):
                             pheno_graph.add_edge(u, v, weight=weight)
 
-        # added_neurons = []
-
-
-        # Add input nodes to graph
-        # for neuron in [n for n in self.neurons if n.neuronType == NeuronType.INPUT]:
-        #     phenoGraph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType, bias=neuron.bias, pos=(neuron.x, neuron.y))
-
-
-        # Add links from input nodes to queue
-        # queue: Queue = Queue()
-        # for link in [l for l in self.links if phenoGraph.has_node(l.fromNeuron.ID)]:
-        #     queue.put(link)
-
-        # Add output nodes to graph
-        # for neuron in [n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]:
-        #     phenoGraph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType, bias=neuron.bias, pos=(neuron.x, neuron.y))
-        #
-        # nodesVisited: Dict[int, SNeuron] = {}
-        # while not queue.empty():
-        #     link: LinkGene = queue.get()
-        #
-        #     phenoGraph.add_edge(link.fromNeuron.ID, link.toNeuron.ID, weight=link.weight)
-        #
-        #     toNeuron = link.toNeuron
-        #     if not phenoGraph.has_node(toNeuron.ID):
-        #         phenoGraph.add_node(toNeuron.ID, activation=toNeuron.activation, type=toNeuron.neuronType, bias=toNeuron.bias,
-        #                             pos=(toNeuron.x, toNeuron.y))
-        #
-        #     for l in [l for l in self.links if l.fromNeuron == toNeuron]:
-        #         print(l)
-        #         queue.put(l)
-
-
-
-            # phenotypeNeurons.append(neuron)
-            # phenoGraph.add_node(neuron.ID, activation=neuron.activation, type=neuron.neuronType, bias=neuron.bias, pos=(neuron.x, neuron.y))
-
-            # nodesVisited[neuron.ID] = neuron
-
-            # if neuron.ID not in linksDict:
-            #     continue
-            #
-            # for link in linksDict[neuron.ID]:
-            #     if not link.enabled:
-            #         continue
-            #
-            #     fromNeuron = None
-            #     # If we haven't visited this node before, add it to the queue
-            #     if link.fromNeuron.ID not in nodesVisited:
-            #         fromNeuron = SNeuron(link.fromNeuron)
-            #         queue.put(SNeuron(link.fromNeuron))
-            #
-            #     else:
-            #         fromNeuron = nodesVisited[link.fromNeuron.ID]
-
-
-
-        # print(phenoGraph.nodes.data())
-        # print("outputs: ", len([n for n in self.neurons if n.neuronType == NeuronType.OUTPUT]), len([n for n,d in phenoGraph.out_degree() if d == 0]))
-        phenotype = neat.phenotypes.Phenotype(dummy_graph, self.ID)
+        phenotype = neat.phenotypes.Phenotype(pheno_graph, self.ID)
         phenotype.genome = self
 
         return phenotype

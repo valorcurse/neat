@@ -1,6 +1,5 @@
-from icontract import require, ensure
+import numpy as np
 
-from neat.evaluation import Evaluation
 class Aurora:
 
     def __init__(self, encoding_dim, inputs_dim):
@@ -25,9 +24,12 @@ class Aurora:
         self.inputs_dim = inputs_dim
         self.encoding_dim = encoding_dim
 
+        print("Aurora | Input dim: {} | Encoding dim: {}".format(self.inputs_dim, self.encoding_dim))
+
         lrelu = lambda x: tf.keras.layers.LeakyReLU(alpha=0.1)(x)
         # activation = lrelu
         activation = 'tanh'
+        encoding_activation = 'tanh'
         # activation = 'sigmoid'
 
         # this is our input placeholder
@@ -40,7 +42,7 @@ class Aurora:
         layer4 = Dense(int(inputs_dim/16), activation=activation)(layer3)
 
         # "encoded" is the encoded representation of the input
-        encoded = Dense(self.encoding_dim, activation=activation)(layer4)
+        encoded = Dense(self.encoding_dim, activation=encoding_activation)(layer4)
 
         layer5 = Dense(int(inputs_dim/16), activation=activation)(encoded)
         layer6 = Dense(int(inputs_dim/8), activation=activation)(layer5)
@@ -68,7 +70,8 @@ class Aurora:
         # create the decoder model
         # decoder = Model(encoded_input, decoder_layer(encoded_input))
 
-        self.autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+        self.autoencoder.compile(optimizer='adadelta', loss='binary_crossentropy')
+        # self.autoencoder.compile(optimizer='adadelta', loss='mean_squared_error')
         # self.autoencoder.save_weights('basic.h5')
 
     def refine(self, phenotypes, evaluate):
@@ -83,10 +86,25 @@ class Aurora:
 
             _, states = evaluate(phenotypes)
 
-            ten_percent = max(1, int(states.shape[0] * 0.25))
+            # m = np.mean(states, axis=0)
+            # std = np.std(states, axis=0)
+            # std[std == 0] = 1
+            #
+            # data = 0.5 * (np.tanh(0.01 * ((states - m) / std)) + 1)
 
-            train = states[:-ten_percent]
-            test = states[-ten_percent:]
+            # print("mean {}".format(m))
+            # print("std {}".format(std))
+
+            # print("states")
+            # print(states)
+
+            # print("data")
+            # print(data)
+
+            test_percent = max(1, int(states.shape[0] * 0.2))
+
+            train = states[:-test_percent]
+            test = states[-test_percent:]
 
             self.autoencoder.save_weights('weights.tmp')
 

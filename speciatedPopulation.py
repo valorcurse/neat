@@ -150,27 +150,36 @@ class SpeciatedPopulation(Population):
         for s in self.species:
             s.adjustFitnesses()
 
-        half_pop = int(self.population_size / 2)
+        # multiobjectivePopulation.py:86
+        pop_available = self.population_size - self.population_size/5
+        half_pop = int(pop_available / 2)
         shared_pop = int(half_pop / len(self.species))
 
-        fitnesses = [np.array([m.adjustedFitness for m in s.members]) for s in self.species]
-        print(fitnesses)
+        debug_print("half_pop: {} | shared_pop: {}".format(half_pop, shared_pop))
+
+        species_fitnesses = [np.array([m.adjustedFitness for m in s.members]) for s in self.species]
+        sum_of_fitnesses = [0.0]*len(species_fitnesses)
         total_fitnesses = 0.0
-        for i, f in enumerate(fitnesses):
+
+        # This translates the fitnesses so the lowest fitness starts at 0
+        # It's mostly to prevent there being negative fitnesses
+        for i, f in enumerate(species_fitnesses):
             min = np.min(f)
-            fitnesses[i] = np.sum(f - min)
-            total_fitnesses += np.sum(f - min)
 
-
+            # Set a minimum of 1 fitness for mathematical reasons
+            sum_of_fitnesses[i] = np.sum(f - min) + 1
+            total_fitnesses += sum_of_fitnesses[i]
 
         for i, s in enumerate(self.species):
-            spawn_portion = fitnesses[i]/total_fitnesses
+            spawn_portion = sum_of_fitnesses[i]/total_fitnesses
             s.numToSpawn = shared_pop + int(spawn_portion * half_pop)
-            print("Species {} - Total fitness {} - To spawn {} - Portion to spawn: {}".format(s.ID, fitnesses[i], s.numToSpawn, spawn_portion))
+
+            debug_print("Species {} - Spawn: {}".format(s.ID, s.numToSpawn))
 
     def speciate(self, genome) -> None:
 
-        if random.random() > 0.1:
+        # if random.random() > 0.01:
+        if random.random() > 1.0:
             random.choice(genome.parents).species.addMember(genome)
             return
 
@@ -185,7 +194,6 @@ class SpeciatedPopulation(Population):
         if species is None:
             self.speciesNumber += 1
             self.species.append(Species(self.speciesNumber, genome))
-            print("Creating new species %d" % self.speciesNumber)
         else:
             species.addMember(genome)
 
@@ -194,8 +202,8 @@ class SpeciatedPopulation(Population):
 
     def newGeneration(self) -> None:
 
-        for s in self.species:
-            s.leader = random.choice(s.members)
+        # for s in self.species:
+        #     s.leader = random.choice(s.members)
             # s.members = []
 
         newPop = []
@@ -218,8 +226,11 @@ class SpeciatedPopulation(Population):
             # cutoff = max(cutoff, 2)
             # s.members = s.members[:cutoff]
 
+
             # Generate new baby genome
-            for i in range(s.numToSpawn - len(s.members)):
+            to_spawn = max(0, s.numToSpawn - len(s.members))
+            debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
+            for i in range(to_spawn):
                 baby: genes.Genome = None
 
                 if random.random() > self.mutationRates.crossoverRate:
@@ -243,8 +254,8 @@ class SpeciatedPopulation(Population):
                 baby.ID = self.currentGenomeID
 
                 # Find species for new baby
-                self.speciate(baby)
-
+                # self.speciate(baby)
+                s.addMember(baby)
 
                 newPop.append(baby)
 
@@ -255,12 +266,19 @@ class SpeciatedPopulation(Population):
         self.genomes = newPop
 
     def reproduce(self) -> List[genes.Genome]:
-        
+        for s in self.species:
+            s.leader = min([(m, m.calculateCompatibilityDistance(s.leader)) for m in s.members], key=lambda m: m[1])[0]
+            s.members = []
+            # for m in s.members:
+            #     self.speciate(m)
+
+
+        for g in self.genomes:
+            self.speciate(g)
+
         self.generation += 1
 
         self.calculateSpawnAmount()
         self.newGeneration()
-
-        print("Number of genomes: %d"%len(self.genomes))
 
         return self.genomes

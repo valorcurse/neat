@@ -32,7 +32,7 @@ class NEAT:
         self.milestone: float = 0.01
         self.epochs = -1
         # self.refinement_epoch = 50
-        self.refinement_epochs = [25, 50, 100, 350, 750, 1550]
+        self.refinement_epochs = [0, 50, 100, 350, 750, 1550]
         # self.refinement_epochs = [0, 10, 25, 50, 100, 150, 350, 750, 1550]
 
         # If using MapElites
@@ -83,12 +83,10 @@ class NEAT:
             self.epochs += 1
 
             if self.epochs in self.refinement_epochs:
-                # self.population.refine_behaviors(self.eval_env)
                 self.population.refine_behaviors(self.evaluate_vectorized)
 
             self.phenotypes = self.population.create_phenotypes()
             fitnesses, states = self.evaluate_vectorized(self.phenotypes)
-            print("Fitnesses: {}".format(fitnesses))
 
             self.population.updatePopulation(MOUpdate(states, fitnesses))
             self.population.reproduce()

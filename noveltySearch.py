@@ -48,7 +48,7 @@ class NoveltySearch:
                 # plt.figure(1)
                 # plt.scatter(behavior[0], behavior[1])
 
-        print("Novelty map size: {}".format(self.novelty_map.shape[0]))
+        # print("Novelty map size: {}".format(self.novelty_map.shape[0]))
         # print(sparsenesses)
         return sparsenesses
 
@@ -79,8 +79,8 @@ class NoveltySearch:
 
 
 
-        print("Novelty map size: {}".format(self.novelty_map.shape[0]))
-        print(sparsenesses)
+        # print("Novelty map size: {}".format(self.novelty_map.shape[0]))
+        # print(sparsenesses)
         return (sparsenesses, local_fitnesses)
 
     def reset(self):

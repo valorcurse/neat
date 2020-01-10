@@ -72,9 +72,9 @@ class MOPopulation(SpeciatedPopulation):
         else:
             novelties = self.novelty_search.calculate_novelty(features, fitnesses)
 
-
         for genome, novelty in zip(self.genomes, novelties):
             genome.novelty = novelty
+            # genome.novelty = 0.0
 
         # Fitness and novelty are made negative, because the non dominated sorting
         # is a minimalization algorithm
@@ -82,11 +82,8 @@ class MOPopulation(SpeciatedPopulation):
 
         ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=points)
 
-        print("Non-dominated genomes:")
-        print([(fitnesses[i], novelties[i]) for i in ndf[0]])
-
         nd_genomes = []
-        space_to_fill = int(self.population_size/2)
+        space_to_fill = int(self.population_size/5)
         space_left = space_to_fill
         i = 0
         while (space_left > 0):
