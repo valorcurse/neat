@@ -70,7 +70,9 @@ class Phenotype:
         self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
 
-        self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
+        # Adjacency matrix sorted topologically
+        self.adjacency_matrix = nx.adjacency_matrix(self.graph, nodelist=list(nx.topological_sort(self.graph))).todense()
+        # self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
 
         self.activations = np.array([neat.genes.FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
         self.bias = np.array([self.graph.nodes()[n]['bias'] for n in self.graph.nodes()], dtype=np.int32)
@@ -86,37 +88,33 @@ class FeedforwardCUDA(object):
     def __init__(self):
         self.threadsperblock = 32
 
-        self.mem = []
-
     def update(self, phenotypes, X):
 
         if type(X) is not np.ndarray:
             X = np.array(X)
 
-        self.blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
+        blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
 
-        self.phenotypes = phenotypes
+        num_of_outputs = len(phenotypes[0].out_nodes)
 
-        self.num_of_outputs = len(self.phenotypes[0].out_nodes)
-
-
-        assert X.shape[1] == len(phenotypes[0].in_nodes), \
+        assert X.shape == (len(phenotypes), len(phenotypes[0].in_nodes)), \
             "Incorrect number of input values. There are {} instead of {}: {}".format(
-                X.shape[1],
-                len(phenotypes[0].in_nodes),
+                X.shape,
+                (len(phenotypes), len(phenotypes[0].in_nodes)),
                 phenotypes[0].graph.nodes.data()
             )
 
 
 
-        adj_matrices = [p.adjacency_matrix for p in self.phenotypes]
+        adj_matrices = [p.adjacency_matrix for p in phenotypes]
         acts = [p.activations for p in phenotypes]
         bias = [p.bias for p in phenotypes]
 
         largest_adj_size = max([n.shape[0] for n in adj_matrices])
-
-        # Pad all matrices ti conform with the largest network
+        original_sizes = np.zeros(len(phenotypes), dtype=np.int32)
+        # Pad all matrices to conform with the largest network
         for i, (adj, act, bia) in enumerate(zip(adj_matrices, acts, bias)):
+            original_sizes[i] = adj.shape[0]
             new_size = largest_adj_size - adj.shape[0]
 
             adj_matrices[i] = np.pad(adj, [(0, new_size), (0, new_size)], mode='constant')
@@ -134,15 +132,16 @@ class FeedforwardCUDA(object):
             row[:X.shape[1]] = X[row_i]
 
 
-        results = np.array([np.zeros(self.num_of_outputs, dtype=np.float32) for _ in adj_matrices])
+        results = np.array([np.zeros(num_of_outputs, dtype=np.float32) for _ in adj_matrices])
 
         cuda_mem = cuda.to_device(mem)
         cuda_adj = cuda.to_device(adj_matrices)
         cuda_acts = cuda.to_device(acts)
         cuda_bias = cuda.to_device(bias)
+        cuda_original_sizes = cuda.to_device(original_sizes)
         cuda_results = cuda.to_device(results)
 
-        execute_network[self.blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_results)
+        execute_network[blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
         results = cuda_results.copy_to_host()
 
         return results
@@ -253,6 +252,25 @@ def feedForward(adj, acts, bias, mem):
             mem[m_i] = sum  # Linear
 
 @cuda.jit()
+def execute_network(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
+    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+    if i >= all_mem.shape[0]:
+        return
+
+    mem = all_mem[i]
+    adj = all_adj[i]
+    acts = all_acts[i]
+    bias = all_bias[i]
+    original_size = all_original_sizes[i]
+    results = all_results[i]
+
+    feedForward(adj, acts, bias, mem)
+
+    size_diff = results.shape[0] - original_size
+    for j in range(results.shape[0]):
+        results[j] = mem[-(results.shape[0] + size_diff) + j]
+
+@cuda.jit()
 def calc_substrate(X, Y, adj, acts, mems, results):
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     if i >= results.shape[0]:
@@ -289,20 +307,3 @@ def calculateLinks(X, Y, start_index, i, mem):
     mem[1] = X[x][1]
     mem[2] = Y[y][0]
     mem[3] = Y[y][1]
-
-@cuda.jit()
-def execute_network(all_mem, all_adj, all_acts, all_bias, all_results):
-    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    if i >= all_mem.shape[0]:
-        return
-
-    mem = all_mem[i]
-    adj = all_adj[i]
-    acts = all_acts[i]
-    bias = all_bias[i]
-    results = all_results[i]
-
-    feedForward(adj, acts, bias, mem)
-
-    for j in range(results.shape[0]):
-        results[j] = mem[-results.shape[0] + j]

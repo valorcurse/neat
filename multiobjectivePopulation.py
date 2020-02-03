@@ -22,16 +22,13 @@ from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, 
 
 class MOConfiguration(PopulationConfiguration):
     def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int, obj_ranges: List[Tuple[float, float]]):
-        self._data = {
-            "population_size": population_size,
-            "n_inputs": n_inputs,
-            "n_outputs": n_outputs,
-            "behavior_dimensions": behavior_dimensions,
-            "objective_ranges": obj_ranges
-        }
+        super().__init__(population_size, n_inputs, n_outputs)
+
+        self._data["behavior_dimensions"] = behavior_dimensions
+        self._data["objective_ranges"] = obj_ranges
 
 class MOUpdate(SpeciesUpdate):
-    def __init__(self, behaviors, fitness: np.ndarray):
+    def __init__(self, fitness: np.ndarray, behaviors):
         super().__init__(fitness)
 
         self._data["behaviors"] = behaviors
@@ -110,14 +107,10 @@ class MOPopulation(SpeciatedPopulation):
                "Only {}/{} genomes were copied.".format(len(nd_genomes), space_to_fill)
 
         self.genomes = nd_genomes
+        self.speciateAll()
+
         for s in self.species:
-            s.members = []
-
-        for g in self.genomes:
-            self.speciate(g)
-
-        for s in [s for s in self.species if len(s.members) == 0]:
-            self.species.remove(s)
+            s.num_of_elites = len(s.members)
 
         nd_indexes = [a for l in ndf[:i] for a in l]
         update.fitness = np.array([update.fitness[i] for i in nd_indexes], dtype=np.float32)

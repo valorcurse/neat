@@ -1,16 +1,14 @@
 from typing import List, Any, Tuple
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 import neat.innovations
 from neat.utils import chunks
 from neat.phenotypes import Phenotype
-from neat.evaluation import Evaluation
 from neat.genes import MutationRates, Phase, SpeciationType
 
-from neat.mapElites import MapElites, MapElitesConfiguration
-from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
+from neat.mapElites import MapElites, MapElitesConfiguration, MapElitesUpdate
+from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 from neat.multiobjectivePopulation import MOConfiguration, MOPopulation, MOUpdate
 from neat.population import PopulationConfiguration, Population
 
@@ -21,7 +19,7 @@ class NEAT:
         self.population_configuration = population_configuration
         self.innovations = neat.innovations.Innovations()
 
-        self.objective_ranges = population_configuration.objective_ranges
+        # self.objective_ranges = population_configuration.objective_ranges
 
         self.mutation_rates: MutationRates = mutation_rates
         self.phenotypes: List[Phenotype] = []
@@ -31,7 +29,6 @@ class NEAT:
 
         self.milestone: float = 0.01
         self.epochs = -1
-        # self.refinement_epoch = 50
         self.refinement_epochs = [0, 50, 100, 350, 750, 1550]
         # self.refinement_epochs = [0, 10, 25, 50, 100, 150, 350, 750, 1550]
 
@@ -67,10 +64,7 @@ class NEAT:
         assert all_fitnesses.shape[0] == len(phenotypes), "Combined fitnesses have size {} instead of {}.".format(len(all_fitnesses), len(phenotypes))
         assert all_features.shape[0] == len(phenotypes), "Combined states have size {} instead of {}.".format(len(all_features), len(phenotypes))
 
-        # Normalize objectives
-        # fitness_range = self.objective_ranges[0]
-        # all_fitnesses = (all_fitnesses - fitness_range[0]) / (fitness_range[1] - fitness_range[0])
-
+        # This is just for debugging
         for phenotype, fitness in zip(phenotypes, all_fitnesses):
             phenotype.fitness = fitness
 
@@ -85,13 +79,18 @@ class NEAT:
             if self.epochs in self.refinement_epochs:
                 self.population.refine_behaviors(self.evaluate_vectorized)
 
+            self.population.reproduce()
+
             self.phenotypes = self.population.create_phenotypes()
             fitnesses, states = self.evaluate_vectorized(self.phenotypes)
 
-            self.population.updatePopulation(MOUpdate(states, fitnesses))
-            self.population.reproduce()
+            if isinstance(self.population_configuration, MapElitesConfiguration):
+                self.population.updatePopulation(MapElitesUpdate(fitnesses, states))
 
-            # plt.draw()
-            # plt.pause(0.1)
+            elif isinstance(self.population_configuration, SpeciesConfiguration):
+                self.population.updatePopulation(SpeciesUpdate(fitnesses))
+
+            elif isinstance(self.population_configuration, MOConfiguration):
+                self.population.updatePopulation(MOUpdate(fitnesses, states))
 
             yield

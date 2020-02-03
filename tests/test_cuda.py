@@ -126,6 +126,70 @@ def test_different_input():
 
     np.testing.assert_array_almost_equal(result, answers)
 
+def test_multiple_phenotypes():
+    G1 = nx.DiGraph()
+    G1.add_nodes_from([
+        (0, {"activation": np.tanh, "type": NeuronType.INPUT, "bias": 0.0, "pos": (-1.0, -1.0)}),
+        (-1, {"activation": np.tanh, "type": NeuronType.INPUT, "bias": 0.0, "pos": (0.0, -1.0)}),
+
+        (6, {"activation": np.tanh, "type": NeuronType.HIDDEN, "bias": 0.0, "pos": (-1.0, 0.0)}),
+        (10, {"activation": np.tanh, "type": NeuronType.HIDDEN, "bias": 0.0, "pos": (0.0, 0.0)}),
+        (3, {"activation": np.tanh, "type": NeuronType.HIDDEN, "bias": 0.0, "pos": (1.0, 0.0)}),
+
+        (-2, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias": 0.0, "pos": (-1.0, 1.0)}),
+    ])
+
+    G1.add_weighted_edges_from([
+        (0, -2, 0.15286614111378544),
+        (-1, -2, 0.8345164457693686),
+        (0, 3, 0.15286614111378544),
+        (3, -2, 1.0),
+        (0, 6, 0.15286614111378544),
+        (6, 3, 1.0),
+        (6, 10, 1.0),
+        (10, 3, 1.0)
+    ])
+
+    phenotype1 = Phenotype(G1, 0)
+
+    G2 = nx.DiGraph()
+    G2.add_nodes_from([
+        (0, {"activation": np.tanh, "type": NeuronType.INPUT, "bias": 0.0, "pos": (-1.0, -1.0)}),
+        (-1, {"activation": np.tanh, "type": NeuronType.INPUT, "bias": 0.0, "pos": (0.0, -1.0)}),
+
+        (6, {"activation": np.tanh, "type": NeuronType.HIDDEN, "bias": 0.0, "pos": (-1.0, 0.0)}),
+        (3, {"activation": np.tanh, "type": NeuronType.HIDDEN, "bias": 0.0, "pos": (1.0, 0.0)}),
+
+        (-2, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias": 0.0, "pos": (-1.0, 1.0)}),
+    ])
+
+    G2.add_weighted_edges_from([
+        (0, -2, 0.15286614111378544),
+        (-1, -2, 0.8345164457693686),
+        (0, 3, 0.15286614111378544),
+        (3, -2, 1.0),
+        (0, 6, 0.15286614111378544),
+        (6, 3, 1.0)
+    ])
+
+    phenotype2 = Phenotype(G2, 0)
+
+    inputs = np.array([1, 1])
+
+    feedforward_highest = FeedforwardCUDA()
+
+    result_one = feedforward_highest.update([phenotype1], [inputs])
+
+    result_both = feedforward_highest.update([phenotype1, phenotype2], [inputs, inputs])
+
+    assert result_one[0] == result_both[0]
+
+    # norm_inputs = np.tanh(inputs)
+    # hidden = math.tanh(norm_inputs[1]*0.4)
+    # answers = np.tanh([hidden*0.1, 0.0])
+    #
+    # np.testing.assert_array_almost_equal(result, answers, decimal=4)
+
 def test_custom():
     G = nx.DiGraph()
     G.add_nodes_from([

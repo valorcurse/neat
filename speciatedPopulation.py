@@ -35,7 +35,8 @@ class Species:
         self.highestFitness: float = 0.0
         self.generationsWithoutImprovement: int = 0
 
-        # self.milestone: float = leader.milestone
+
+        self.num_of_elites = 2
 
         self.stagnant: bool = False
 
@@ -78,12 +79,7 @@ class Species:
 
 class SpeciesConfiguration(PopulationConfiguration):
     def __init__(self, population_size: int, n_inputs: int, n_outputs: int):
-        self._data = {
-            "population_size": population_size,
-            "n_inputs": n_inputs, 
-            "n_outputs": n_outputs
-        }
-
+        super().__init__(population_size, n_inputs, n_outputs)
 
 class SpeciesUpdate(PopulationUpdate):
     def __init__(self, fitness: np.ndarray):
@@ -113,7 +109,8 @@ class SpeciatedPopulation(Population):
         self.species.append(firstSpecies)
         
         for i in range(self.population_size - 1):
-            newGenome = fastCopy(baseGenome)
+            # newGenome = fastCopy(baseGenome)
+            newGenome = deepcopy(baseGenome)
             newGenome.ID = self.currentGenomeID
             firstSpecies.addMember(newGenome)
             self.genomes.append(newGenome)
@@ -151,11 +148,12 @@ class SpeciatedPopulation(Population):
             s.adjustFitnesses()
 
         # multiobjectivePopulation.py:86
-        pop_available = self.population_size - self.population_size/5
+        # pop_available = self.population_size - self.population_size/5
+        pop_available = self.population_size
         half_pop = int(pop_available / 2)
         shared_pop = int(half_pop / len(self.species))
 
-        debug_print("half_pop: {} | shared_pop: {}".format(half_pop, shared_pop))
+        # debug_print("half_pop: {} | shared_pop: {}".format(half_pop, shared_pop))
 
         species_fitnesses = [np.array([m.adjustedFitness for m in s.members]) for s in self.species]
         sum_of_fitnesses = [0.0]*len(species_fitnesses)
@@ -174,7 +172,37 @@ class SpeciatedPopulation(Population):
             spawn_portion = sum_of_fitnesses[i]/total_fitnesses
             s.numToSpawn = shared_pop + int(spawn_portion * half_pop)
 
-            debug_print("Species {} - Spawn: {}".format(s.ID, s.numToSpawn))
+            # debug_print("Species {} - Spawn: {}".format(s.ID, s.numToSpawn))
+
+    def speciateAll(self):
+        # Wipe species clean for redistrubition of genomes
+        for s in self.species:
+            s.members = []
+
+        # Distribute genomes to their most fitting species
+        for g in self.genomes:
+            self.speciate(g)
+
+        # Remove species that have no more members
+        self.purgeSpecies()
+
+        # Determine new species leader from the new members
+        for s in self.species:
+            distances = [m.calculateCompatibilityDistance(s.leader) for m in s.members]
+            new_leader_id = np.argmin(distances)
+            new_leader = s.members[new_leader_id]
+
+            # debug_print("Species {} - Distance between leaders: {}".format(s.ID, distances[new_leader_id]))
+
+            s.leader = new_leader
+            # possible_leaders.remove(s.leader)
+
+            # s.members = []
+
+        # self.purgeSpecies()
+
+        genomes_in_species = np.sum([len(s.members) for s in self.species])
+        assert genomes_in_species == len(self.genomes), "There are genomes that are not part of a species. {}/{} are accounted for.".format(genomes_in_species, len(self.genomes))
 
     def speciate(self, genome) -> None:
 
@@ -183,54 +211,57 @@ class SpeciatedPopulation(Population):
             random.choice(genome.parents).species.addMember(genome)
             return
 
-        species = None
-        for s in self.species:
-            distance = genome.calculateCompatibilityDistance(s.leader)
+        distances = [genome.calculateCompatibilityDistance(s.leader) for s in self.species]
+        closest_species = np.argmin(distances)
 
-            if distance <= self.mutationRates.newSpeciesTolerance:
-                species = s
-                break
-
-        if species is None:
+        # If it doesn't fit anywhere, create new species
+        if distances[closest_species] > self.mutationRates.newSpeciesTolerance:
             self.speciesNumber += 1
             self.species.append(Species(self.speciesNumber, genome))
         else:
-            species.addMember(genome)
+            self.species[closest_species].addMember(genome)
+
+    # Remove species without members
+    def purgeSpecies(self):
+        for s in [s for s in self.species if len(s.members) == 0]:
+            self.species.remove(s)
 
     def tournament_selection(self, genomes):
         return sorted(genomes, key=lambda x: x.fitness)[0]
 
     def newGeneration(self) -> None:
 
-        # for s in self.species:
-        #     s.leader = random.choice(s.members)
-            # s.members = []
 
-        newPop = []
+        new_genomes = []
         for s in self.species:
-            # s.members.sort(reverse=True, key=lambda x: x.fitness)
+            newPop = []
 
-            newPop.extend(s.members)
+            # reproduction_members = copy(s.members)
+            reproduction_members = []
 
-            reproduction_members = copy(s.members)
-
-            # topPercent = int(math.ceil(0.01 * len(s.members)))
+            s.members.sort(reverse=True, key=lambda x: x.fitness)
             # Grabbing the top 2 performing genomes
-            # for topMember in s.members[:topPercent]:
-            #     newPop.append(topMember)
-            #     s.numToSpawn -= 1
+            for topMember in s.members[:s.num_of_elites]:
+                newPop.append(topMember)
+                # reproduction_members.append(topMember)
+                s.numToSpawn -= 1
 
             # Only use the survival threshold fraction to use as parents for the next generation.
-            # cutoff = int(math.ceil(0.1 * len(s.members)))
             # Use at least two parents no matter what the threshold fraction result is.
-            # cutoff = max(cutoff, 2)
-            # s.members = s.members[:cutoff]
+            cutoff = max(int(math.ceil(0.1 * len(s.members))), 2)
+            reproduction_members = copy(s.members[:cutoff])
+            # for topMember in s.members[:cutoff]:
+            #     newPop.append(topMember)
+            #     reproduction_members.append(topMember)
+            # reproduction_members = s.members[:cutoff]
 
+            # s.members = []
 
             # Generate new baby genome
-            to_spawn = max(0, s.numToSpawn - len(s.members))
-            debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
-            for i in range(to_spawn):
+            # to_spawn = max(0, s.numToSpawn - len(s.members))
+            # to_spawn = max(0, s.numToSpawn)
+            # debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
+            for i in range(s.numToSpawn):
                 baby: genes.Genome = None
 
                 if random.random() > self.mutationRates.crossoverRate:
@@ -240,45 +271,31 @@ class SpeciatedPopulation(Population):
                 else:
 
                     # Tournament selection
-
-                    randomMembers = lambda: [random.choice(reproduction_members) for _ in range(5)]
+                    randomMembers = lambda: [random.choice(reproduction_members) for _ in range(2)]
                     g1 = self.tournament_selection(randomMembers())
                     g2 = self.tournament_selection(randomMembers())
-
-                    # g1 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
-                    # g2 = sorted(randomMembers(), key=lambda x: x.fitness)[0]
 
                     baby = self.crossover(g1, g2)
 
                 self.currentGenomeID += 1
                 baby.ID = self.currentGenomeID
 
-                # Find species for new baby
-                # self.speciate(baby)
                 s.addMember(baby)
 
                 newPop.append(baby)
 
-        #  Remove empty species
-        for s in [s for s in self.species if len(s.members) == 0]:
-            self.species.remove(s)
+            s.members = newPop
+            new_genomes += s.members
 
-        self.genomes = newPop
+        self.genomes = new_genomes
 
     def reproduce(self) -> List[genes.Genome]:
-        for s in self.species:
-            s.leader = min([(m, m.calculateCompatibilityDistance(s.leader)) for m in s.members], key=lambda m: m[1])[0]
-            s.members = []
-            # for m in s.members:
-            #     self.speciate(m)
-
-
-        for g in self.genomes:
-            self.speciate(g)
-
         self.generation += 1
 
+        self.speciateAll()
+
         self.calculateSpawnAmount()
+
         self.newGeneration()
 
         return self.genomes

@@ -41,11 +41,11 @@ class FuncsEnum(Enum):
 class MutationRates:
     def __init__(self) -> None:
 
-        self.newSpeciesTolerance = 0.25
+        self.newSpeciesTolerance = 5.0
 
 
         self.crossoverRate = 0.3
-        self.chanceToAddNeuron = 0.01
+        self.chanceToAddNeuron = 0.03
         self.chanceToAddLink = 0.05
 
         self.mutationRate = 0.9
@@ -56,7 +56,7 @@ class MutationRates:
         self.chanceToDeleteLink = 0.0
 
         self.probabilityOfWeightReplaced = 0.1
-        self.maxWeightPerturbation = 1.0
+        self.maxWeightPerturbation = 1.5
 
         self.mpcMargin = 20
 
@@ -70,7 +70,8 @@ class NeuronGene:
         self.x = x
         
         # self.activation = self.relu
-        self.activation = self.leakyRelu
+        # self.activation = self.leakyRelu
+        self.activation = self.tanh
         self.bias = 0.0
 
         # self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
@@ -165,12 +166,14 @@ class Genome:
         self.innovations: Innovations = innovations
         self.parents = parents
 
-        self.links = fastCopy(links)
-        
+        # self.links = fastCopy(links)
+        self.links = deepcopy(links)
+
 
         self.inputs = inputs
         self.outputs = outputs
-        self.neurons: List[NeuronGene] = fastCopy(neurons)
+        # self.neurons: List[NeuronGene] = fastCopy(neurons)
+        self.neurons: List[NeuronGene] = deepcopy(neurons)
 
         if len(self.neurons) == 0:
             for _ in range(self.inputs):
@@ -178,7 +181,8 @@ class Genome:
             for _ in range(self.outputs):
                 self._addNeuron(NeuronType.OUTPUT).activation = NeuronGene.tanh
         else:
-            self.neurons = fastCopy(neurons)
+            # self.neurons = fastCopy(neurons)
+            self.neurons = deepcopy(neurons)
 
         self.data = {}
 
@@ -205,6 +209,9 @@ class Genome:
         copy_object.data = deepcopy(self.data)
         return copy_object
 
+    def __repr__(self):
+        return "Genome(ID={}, neurons={}, links={})".format(self.ID, self.neurons, self.links)
+
     def getLinksIn(self, neuron: NeuronGene) -> List[LinkGene]:
         return [l for l in self.links if l.toNeuron == neuron]
 
@@ -215,11 +222,8 @@ class Genome:
         return len(self.getLinksIn(neuron)) >= 1 or len(self.getLinksOut(neuron)) >= 1
 
     def calculateCompatibilityDistance(self, other: Genome) -> float:
-        if self.ID == other.ID:
-            return 0.0
-
         disjointRate = 1.0
-        matchedRate = 0.4
+        matchedRate = 0.5
 
         n_genes = max(len(other.neurons) + len(other.links), len(self.neurons) + len(self.links))
 
@@ -227,13 +231,14 @@ class Genome:
         other_links = set(l for l in other.links)
         disjoint_links = (own_links - other_links).union(other_links - own_links)
         
-        intersecting_links = list(zip(own_links.intersection(other_links), other_links.intersection(own_links)))
+        matching_links = list(zip(own_links.intersection(other_links), other_links.intersection(own_links)))
         weight_difference = 0.0
-        for left, right in intersecting_links:
+        for left, right in matching_links:
             weight_difference += math.fabs(left.weight - right.weight)
 
         # linkDistance = (disjointRate * len(disjoint_links) / n_genes) + weight_difference * matchedRate
-        linkDistance = (disjointRate * len(disjoint_links) / n_genes)
+        # linkDistance = (disjointRate * len(disjoint_links) / n_genes)
+        linkDistance = disjointRate * len(disjoint_links) + weight_difference * matchedRate
 
         own_neurons = set(n.ID for n in self.neurons)
         other_neurons = set(n.ID for n in other.neurons)
@@ -241,12 +246,13 @@ class Genome:
         # Difference between both sets
         disjoint_neurons = (own_neurons - other_neurons).union(other_neurons - own_neurons)
 
-        neuronDistance = (disjointRate * len(disjoint_neurons) / n_genes)
+        # neuronDistance = (disjointRate * len(disjoint_neurons) / n_genes)
+        neuronDistance = disjointRate * len(disjoint_neurons)
 
         distance: float = linkDistance + neuronDistance
         self.distance = distance
         
-        return distance
+        return self.distance
 
     def addRandomLink(self, mutationRates) -> bool:
         if (random.random() > mutationRates.chanceToAddLink):
@@ -287,7 +293,7 @@ class Genome:
 
         return False
 
-    def addLink(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, weight: float = 0.0) -> LinkGene:
+    def addLink(self, fromNeuron: NeuronGene, toNeuron: NeuronGene, weight: float = 1.0) -> LinkGene:
         ID = self.innovations.createNewLinkInnovation(fromNeuron.ID, toNeuron.ID)
 
         link = LinkGene(fromNeuron, toNeuron, ID, weight)
@@ -403,10 +409,15 @@ class Genome:
 
         mutation_successful = False
         while len(mutation_functions) > 0 and not mutation_successful:
-            random_mutation = mutation_functions[random.randint(0, len(mutation_functions) - 1)]
+            # random_mutation = mutation_functions[random.randint(0, len(mutation_functions) - 1)]
+            random_mutation = random.choice(mutation_functions)
+            # print(random_mutation)
             mutation_successful = random_mutation()
 
             mutation_functions.remove(random_mutation)
+
+        # random_mutation = random.choice(mutation_functions)
+        # mutation_successful = random_mutation()
 
         self.links.sort()
 
@@ -416,7 +427,8 @@ class Genome:
         pheno_graph = nx.DiGraph()
         genome_graph = nx.DiGraph()
 
-        neurons = fastCopy(self.neurons)
+        # neurons = fastCopy(self.neurons)
+        neurons = deepcopy(self.neurons)
 
         for neuron in self.neurons:
             # Add all nodes to the genome graph

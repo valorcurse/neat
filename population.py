@@ -8,18 +8,29 @@ from neat.genes import Genome, LinkGene, NeuronGene, MutationRates
 import neat.phenotypes as phenos
 
 
-class ParameterDict:
+class ParameterDict(object):
     def __init__(self):
         self._data = {}
 
     def __getattr__(self, attr):
-        return self._data[attr]
+        if '_data' not in self.__dict__:
+            return
+
+        if attr in self.__dict__['_data']:
+            return self.__dict__['_data'][attr]
 
     # def __setattr__(self, name, value):
     #     self._data.__dict__[name] = value
 
 class PopulationConfiguration(ParameterDict):
-    pass
+    def __init__(self, population_size: int, n_inputs: int, n_outputs: int):
+        super().__init__()
+
+        self._data["population_size"] = population_size
+        self._data["n_inputs"] = n_inputs
+        self._data["n_outputs"] = n_outputs
+        self._data["behavior_dimensions"] = 0
+        self._data["objective_ranges"]=  []
 
 class PopulationUpdate(ParameterDict):
     pass
@@ -55,7 +66,6 @@ class Population:
 
     def crossover(self, mum: Genome, dad: Genome) -> Genome:
 
-
         # If both parents perform equally, choose the simpler one
         best = None
         if (mum.fitness == dad.fitness):
@@ -72,13 +82,15 @@ class Population:
         mum_links = set(l for l in mum.links)
         dad_links = set(l for l in dad.links)
 
+        # Find the matching links
         matching_links = list(zip(mum_links.intersection(dad_links), dad_links.intersection(mum_links)))
 
-        # Crossover the links
+        # Choose each matching link randomly
         babyLinks: List[LinkGene] = []
         for links in matching_links:
             babyLinks.append(random.choice(links))
 
+        # Add the disjoint links of the fittest parent
         most_fit_disjoint_links = mum_links - dad_links if best == mum else dad_links - mum_links
         babyLinks += list(most_fit_disjoint_links)
 
