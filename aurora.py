@@ -27,8 +27,8 @@ class Aurora:
         print("Aurora | Input dim: {} | Encoding dim: {}".format(self.inputs_dim, self.encoding_dim))
 
         lrelu = lambda x: tf.keras.layers.LeakyReLU(alpha=0.1)(x)
-        # activation = lrelu
-        activation = 'tanh'
+        activation = lrelu
+        # activation = 'tanh'
         encoding_activation = 'tanh'
         # activation = 'sigmoid'
 

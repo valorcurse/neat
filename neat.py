@@ -27,7 +27,6 @@ class NEAT:
         self.phase: Phase = Phase.COMPLEXIFYING
         self.speciationType: SpeciationType = SpeciationType.NOVELTY
 
-        self.milestone: float = 0.01
         self.epochs = -1
         self.refinement_epochs = [0, 50, 100, 350, 750, 1550]
         # self.refinement_epochs = [0, 10, 25, 50, 100, 150, 350, 750, 1550]

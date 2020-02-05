@@ -43,10 +43,9 @@ class MutationRates:
 
         self.newSpeciesTolerance = 5.0
 
-
         self.crossoverRate = 0.3
         self.chanceToAddNeuron = 0.03
-        self.chanceToAddLink = 0.05
+        self.chanceToAddLink = 0.15
 
         self.mutationRate = 0.9
         self.chanceToMutateWeight = 0.8
@@ -179,7 +178,7 @@ class Genome:
             for _ in range(self.inputs):
                 self._addNeuron(NeuronType.INPUT).activation = NeuronGene.linear
             for _ in range(self.outputs):
-                self._addNeuron(NeuronType.OUTPUT).activation = NeuronGene.tanh
+                self._addNeuron(NeuronType.OUTPUT).activation = NeuronGene.sigmoid
         else:
             # self.neurons = fastCopy(neurons)
             self.neurons = deepcopy(neurons)

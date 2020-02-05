@@ -7,17 +7,16 @@ import matplotlib.pyplot as plt
 import random
 import math
 
-from copy import deepcopy
+from copy import copy, deepcopy
 
 # import neat.genes as genes
 from neat.utils import debug_print
 from neat.aurora import Aurora
-from neat.evaluation import Evaluation
 from neat.innovations import Innovations
 from neat.population import PopulationUpdate
 from neat.noveltySearch import NoveltySearch
-from neat.genes import NeuronGene, LinkGene, MutationRates
 from neat.population import PopulationConfiguration
+from neat.genes import NeuronGene, LinkGene, MutationRates, Genome
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
 class MOConfiguration(PopulationConfiguration):
@@ -62,8 +61,11 @@ class MOPopulation(SpeciatedPopulation):
 
         features = self.aurora.characterize(update.behaviors)
 
-        fitnesses = update.fitness
-        novelties = []
+        super().updatePopulation(update)
+
+        fitnesses = np.array([g.fitness for g in self.genomes])
+
+        novelties = None
         if self.use_local_competition:
             novelties, fitnesses = self.novelty_search.calculate_local_competition(features, fitnesses)
         else:
@@ -71,7 +73,6 @@ class MOPopulation(SpeciatedPopulation):
 
         for genome, novelty in zip(self.genomes, novelties):
             genome.novelty = novelty
-            # genome.novelty = 0.0
 
         # Fitness and novelty are made negative, because the non dominated sorting
         # is a minimalization algorithm
@@ -79,44 +80,17 @@ class MOPopulation(SpeciatedPopulation):
 
         ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=points)
 
-        nd_genomes = []
-        space_to_fill = int(self.population_size/5)
-        space_left = space_to_fill
-        i = 0
-        while (space_left > 0):
+        for i in range(len(ndf)):
             front_genomes = [self.genomes[j] for j in ndf[i]]
             front_points = [points[j] for j in ndf[i]]
             front_ranks = [ndr[j] for j in ndf[i]]
-
 
             crowding_distances = pg.crowding_distance(front_points) if len(front_points) > 1 else np.zeros((len(front_points)))
             for g, d, r in zip(front_genomes, crowding_distances, front_ranks):
                 g.data['crowding_distance'] = d
                 g.data['rank'] = r
 
-            genomes_to_take = min(len(front_genomes), space_left)
-
-            nd_genomes.extend(front_genomes[:genomes_to_take])
-
-            space_left = max(0, space_left - len(front_genomes[:genomes_to_take]))
-
-            i += 1
-
-        # Make sure the correct number of genomes were copied over
-        assert len(nd_genomes) == space_to_fill, \
-               "Only {}/{} genomes were copied.".format(len(nd_genomes), space_to_fill)
-
-        self.genomes = nd_genomes
-        self.speciateAll()
-
-        for s in self.species:
-            s.num_of_elites = len(s.members)
-
-        nd_indexes = [a for l in ndf[:i] for a in l]
-        update.fitness = np.array([update.fitness[i] for i in nd_indexes], dtype=np.float32)
-        update.behaviors = np.array([update.behaviors[i] for i in nd_indexes], dtype=np.float32)
-
-        super().updatePopulation(update)
+        # super().updatePopulation(update)
 
         self.epochs += 1
 
@@ -146,3 +120,45 @@ class MOPopulation(SpeciatedPopulation):
             self.novelty_search.calculate_local_competition(features, fitnesses)
         else:
             self.novelty_search.calculate_novelty(features, fitnesses)
+
+    def newGeneration(self) -> List[Genome]:
+
+        # nd_genomes = self.genomes
+        # Sort them first by rank and then crowding distance
+        nd_genomes = sorted(self.genomes, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))
+
+        space_to_fill = int(self.population_size / 10)
+        nd_genomes = nd_genomes[:space_to_fill]
+
+        new_genomes = []
+        for s in self.species:
+            reproduction_members = [g for g in nd_genomes if g in s.members]
+            s.members = reproduction_members
+
+            # Generate new baby genome
+            to_spawn = max(0, s.numToSpawn - len(s.members))
+            debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
+            for i in range(to_spawn):
+                baby: Genome = None
+
+                if random.random() > self.mutationRates.crossoverRate:
+                    member = random.choice(reproduction_members)
+                    baby = deepcopy(member)
+                    baby.mutate(self.mutationRates)
+                else:
+
+                    # Tournament selection
+                    randomMembers = lambda: [random.choice(reproduction_members) for _ in range(2)]
+                    g1 = self.tournament_selection(randomMembers())
+                    g2 = self.tournament_selection(randomMembers())
+
+                    baby = self.crossover(g1, g2)
+
+                self.currentGenomeID += 1
+                baby.ID = self.currentGenomeID
+
+                s.addMember(baby)
+
+            new_genomes += s.members
+
+        return new_genomes

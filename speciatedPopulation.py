@@ -68,7 +68,7 @@ class Species:
         highestFitness = max([m.fitness for m in self.members])
 
         # Check if species is stagnant
-        if (highestFitness < self.highestFitness):
+        if (highestFitness <= self.highestFitness):
             self.generationsWithoutImprovement += 1
         else:
             self.generationsWithoutImprovement = 0
@@ -131,14 +131,36 @@ class SpeciatedPopulation(Population):
 
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
+        # Only update fitness if it's better than it was
+        # Will of course always update for new genomes
+        # improved_genomes = [(f, g) for f, g in zip(update.fitness, self.genomes) if f > g.fitness]
+        # for fitness, genome in improved_genomes:
+        #     genome.fitness = fitness
+
         # Set fitness score to their respective genome
         for index, genome in enumerate(self.genomes):
             genome.fitness = update.fitness[index]
 
     def calculateSpawnAmount(self) -> None:
+        best_leaders = []
+
+        # Best species
+        best_species = None
+        best_fitness = -1000.0
+        for s in self.species:
+            max_fitness = np.max([m.fitness for m in s.members])
+
+            best_leaders.append(max_fitness)
+
+            if max_fitness > best_fitness:
+                best_fitness = max_fitness
+                best_species = s
+
+        best_leaders = set(best_leaders)
+
         # Age species and remove stagnant species
         for s in self.species:
-            if len(self.species) > 1:
+            if s != best_species:
                 s.becomeOlder()
 
                 if s.stagnant and len(self.species) > 1:
@@ -155,17 +177,23 @@ class SpeciatedPopulation(Population):
 
         # debug_print("half_pop: {} | shared_pop: {}".format(half_pop, shared_pop))
 
+        # species_fitnesses = [m.adjustedFitness for s in self.species for m in s.members]
         species_fitnesses = [np.array([m.adjustedFitness for m in s.members]) for s in self.species]
+
         sum_of_fitnesses = [0.0]*len(species_fitnesses)
         total_fitnesses = 0.0
 
         # This translates the fitnesses so the lowest fitness starts at 0
         # It's mostly to prevent there being negative fitnesses
-        for i, f in enumerate(species_fitnesses):
-            min = np.min(f)
+        min_fitness = 1000.0
+        for fitnesses in species_fitnesses:
+            min_fitness = min(np.min(fitnesses), min_fitness)
+        # for i, f in enumerate(species_fitnesses):
+        #     min_fitness = min(np.min(f), min_fitness)
 
+        for i, f in enumerate(species_fitnesses):
             # Set a minimum of 1 fitness for mathematical reasons
-            sum_of_fitnesses[i] = np.sum(f - min) + 1
+            sum_of_fitnesses[i] = np.sum(f - min_fitness) + 1
             total_fitnesses += sum_of_fitnesses[i]
 
         for i, s in enumerate(self.species):
@@ -195,11 +223,6 @@ class SpeciatedPopulation(Population):
             # debug_print("Species {} - Distance between leaders: {}".format(s.ID, distances[new_leader_id]))
 
             s.leader = new_leader
-            # possible_leaders.remove(s.leader)
-
-            # s.members = []
-
-        # self.purgeSpecies()
 
         genomes_in_species = np.sum([len(s.members) for s in self.species])
         assert genomes_in_species == len(self.genomes), "There are genomes that are not part of a species. {}/{} are accounted for.".format(genomes_in_species, len(self.genomes))
@@ -229,39 +252,27 @@ class SpeciatedPopulation(Population):
     def tournament_selection(self, genomes):
         return sorted(genomes, key=lambda x: x.fitness)[0]
 
-    def newGeneration(self) -> None:
+    def newGeneration(self) -> List[Genome]:
 
 
         new_genomes = []
         for s in self.species:
             newPop = []
 
-            # reproduction_members = copy(s.members)
-            reproduction_members = []
-
             s.members.sort(reverse=True, key=lambda x: x.fitness)
             # Grabbing the top 2 performing genomes
             for topMember in s.members[:s.num_of_elites]:
                 newPop.append(topMember)
-                # reproduction_members.append(topMember)
-                s.numToSpawn -= 1
 
             # Only use the survival threshold fraction to use as parents for the next generation.
             # Use at least two parents no matter what the threshold fraction result is.
-            cutoff = max(int(math.ceil(0.1 * len(s.members))), 2)
+            cutoff = max(int(math.ceil(0.2 * len(s.members))), 2)
             reproduction_members = copy(s.members[:cutoff])
-            # for topMember in s.members[:cutoff]:
-            #     newPop.append(topMember)
-            #     reproduction_members.append(topMember)
-            # reproduction_members = s.members[:cutoff]
-
-            # s.members = []
 
             # Generate new baby genome
-            # to_spawn = max(0, s.numToSpawn - len(s.members))
-            # to_spawn = max(0, s.numToSpawn)
+            to_spawn = max(0, s.numToSpawn - len(newPop))
             # debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
-            for i in range(s.numToSpawn):
+            for i in range(to_spawn):
                 baby: genes.Genome = None
 
                 if random.random() > self.mutationRates.crossoverRate:
@@ -280,22 +291,19 @@ class SpeciatedPopulation(Population):
                 self.currentGenomeID += 1
                 baby.ID = self.currentGenomeID
 
-                s.addMember(baby)
-
                 newPop.append(baby)
+
 
             s.members = newPop
             new_genomes += s.members
 
-        self.genomes = new_genomes
+        return new_genomes
 
-    def reproduce(self) -> List[genes.Genome]:
+    def reproduce(self) -> None:
         self.generation += 1
 
         self.speciateAll()
 
         self.calculateSpawnAmount()
 
-        self.newGeneration()
-
-        return self.genomes
+        self.genomes = self.newGeneration()
