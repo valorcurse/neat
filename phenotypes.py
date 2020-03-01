@@ -82,7 +82,11 @@ class Phenotype:
     def update(self, X):
         pass
 
-class FeedforwardCUDA(object):
+'''
+Executes neuralnetworks on the GPU for environments that
+need to be executed sequentially
+'''
+class SequentialCUDA(object):
 
 
     def __init__(self):
@@ -146,6 +150,131 @@ class FeedforwardCUDA(object):
 
         return results
 
+'''
+Executes neuralnetworks on the GPU for environments that
+can be parallelized
+'''
+class ParallelCUDA(object):
+
+
+    def __init__(self, X):
+        self.threadsperblock = 32
+        self.kernel = cuda.jit()(self.create_kernel(X))
+
+    def create_kernel(self, data):
+        print("Created kernel: {}".format(data.size))
+        def impl(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
+            i, j = cuda.grid(2)
+
+            X = cuda.const.array_like(data)[j]
+
+            mem = all_mem[i]
+            adj = all_adj[i]
+            acts = all_acts[i]
+            bias = all_bias[i]
+            original_size = all_original_sizes[i]
+            results = all_results[i]
+
+            # for x in range(X.shape[0]):
+            #     mem[x] = X[x]
+            #
+            feedForward_parallel(adj, acts, bias, mem, X)
+
+            size_diff = mem.shape[0] - original_size
+            for k in range(results.shape[0]):
+                results[i] = mem[-(results.shape[0] + size_diff) + k]
+
+        return impl
+
+    def update(self, phenotypes, X):
+
+        if type(X) is not np.ndarray:
+            X = np.array(X)
+
+        blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
+
+        num_of_outputs = len(phenotypes[0].out_nodes)
+
+        assert X.shape == (len(phenotypes), len(phenotypes[0].in_nodes)), \
+            "Incorrect number of input values. There are {} instead of {}: {}".format(
+                X.shape,
+                (len(phenotypes), len(phenotypes[0].in_nodes)),
+                phenotypes[0].graph.nodes.data()
+            )
+
+
+
+        adj_matrices = [p.adjacency_matrix for p in phenotypes]
+        acts = [p.activations for p in phenotypes]
+        bias = [p.bias for p in phenotypes]
+
+        largest_adj_size = max([n.shape[0] for n in adj_matrices])
+        original_sizes = np.zeros(len(phenotypes), dtype=np.int32)
+        # Pad all matrices to conform with the largest network
+        for i, (adj, act, bia) in enumerate(zip(adj_matrices, acts, bias)):
+            original_sizes[i] = adj.shape[0]
+            new_size = largest_adj_size - adj.shape[0]
+
+            adj_matrices[i] = np.pad(adj, [(0, new_size), (0, new_size)], mode='constant')
+            acts[i] = np.pad(act, [(0, new_size)], mode='constant')
+            bias[i] = np.pad(bia, [(0, new_size)], mode='constant')
+
+        adj_matrices = np.array(adj_matrices, dtype=np.float32)
+        acts = np.array(acts, dtype=np.int32)
+        bias = np.array(bias, dtype=np.float32)
+
+        mem = np.array([np.zeros(largest_adj_size, dtype=np.float32) for _ in phenotypes])
+
+        # Copy inputs to mem
+        # for row_i, row in enumerate(mem):
+        #     row[:X.shape[1]] = X[row_i]
+
+
+        results = np.array([np.zeros(num_of_outputs, dtype=np.float32) for _ in adj_matrices])
+
+        cuda_mem = cuda.to_device(mem)
+        cuda_adj = cuda.to_device(adj_matrices)
+        cuda_acts = cuda.to_device(acts)
+        cuda_bias = cuda.to_device(bias)
+        cuda_original_sizes = cuda.to_device(original_sizes)
+        cuda_results = cuda.to_device(results)
+
+        self.kernel[blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
+        results = cuda_results.copy_to_host()
+
+        return results
+
+@cuda.jit(device=True)
+def feedForward_parallel(adj, acts, bias, mem, X):
+    adj_t = adj.T
+
+    for i in range(mem.shape[0]):
+        function = acts[i]
+        weights = adj_t[i].T
+
+        sum = 0.0
+        for j in range(weights.shape[0]):
+            x = X[i] if i < X.size else mem[i]
+            weight = weights[j]
+
+            if function == 6:
+                sum = max(sum, x*weight)
+            else:
+                sum += x*weight
+
+        sum += bias[i]
+        if function == 0:
+            mem[i] = math.tanh(sum)
+        elif function == 1:
+            mem[i] = math.sin(sum)
+        elif function == 2:
+            mem[i] = math.cos(sum)
+        elif function == 3:
+            mem[i] = 1 / (1 + math.exp(-sum))  # Sigmoid
+        elif function == 4:
+            mem[i] = sum if sum > 0.0 else sum * 0.01  # Leaky ReLu
+        elif function == 5:
+            mem[i] = sum  # Linear
 
 class SubstrateCUDA(object):
 
@@ -207,49 +336,6 @@ class SubstrateCUDA(object):
 
         return links
 
-@cuda.jit(device=True)
-def feedForward(adj, acts, bias, mem):
-    adj_t = adj.T
-
-    for m_i in range(mem.shape[0]):
-        # m = mem[m_i]
-        if mem[m_i] != 0.0:
-            continue
-        #     sum = mem[m_i]
-
-        function = acts[m_i]
-
-        weights = adj_t[m_i].T
-        sum = 0.0 if mem[m_i] == 0.0 else mem[m_i]
-        for j in range(weights.shape[0]):
-            weight = weights[j]
-            input = mem[j]
-
-            if weight == 0.0 or input == 0.0:
-                continue
-
-            if function == 6:
-                sum = max(sum, input*weight)
-            else:
-                sum += input*weight
-
-        # if added == 0.0: continue
-
-
-        sum += bias[m_i]
-        if function == 0:
-            mem[m_i] = math.tanh(sum)
-            # print("{} -> {}")
-        elif function == 1:
-            mem[m_i] = math.sin(sum)
-        elif function == 2:
-            mem[m_i] = math.cos(sum)
-        elif function == 3:
-            mem[m_i] = 1 / (1 + math.exp(-sum))
-        elif function == 4:
-            mem[m_i] = sum if sum > 0.0 else sum * 0.01  # Leaky ReLu
-        elif function == 5:
-            mem[m_i] = sum  # Linear
 
 @cuda.jit()
 def execute_network(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):

@@ -13,7 +13,7 @@ if __name__ == '__main__':
     from neat.neat import NEAT
     from neat.neatTypes import NeuronType
     from neat.evaluation import Evaluation
-    from neat.phenotypes import Phenotype, FeedforwardCUDA
+    from neat.phenotypes import Phenotype, SequentialCUDA
     from neat.speciatedPopulation import SpeciesConfiguration
 
 
@@ -27,7 +27,7 @@ if __name__ == '__main__':
         return _f
 
     def run_env_once(phenotype, env):
-        feedforward_highest = FeedforwardCUDA()
+        feedforward_highest = SequentialCUDA()
         states = env.reset()
 
         done = False
@@ -51,7 +51,7 @@ if __name__ == '__main__':
             print("Creating envs...")
             self.envs = SubprocVecEnv([make_env(env_name, seed) for seed in range(envs_size)])
             self.num_of_envs = envs_size
-            self.feedforward = FeedforwardCUDA()
+            self.feedforward = SequentialCUDA()
 
             print("Done.")
 

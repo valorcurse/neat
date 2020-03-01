@@ -6,7 +6,7 @@ from prettytable import PrettyTable
 from neat.neat import NEAT
 from neat.neatTypes import NeuronType
 from neat.evaluation import Evaluation
-from neat.phenotypes import Phenotype, FeedforwardCUDA
+from neat.phenotypes import Phenotype, SequentialCUDA
 from neat.speciatedPopulation import SpeciesConfiguration
 
 
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     class TestOrganism(Evaluation):
 
         def __init__(self):
-            self.feedforward = FeedforwardCUDA()
+            self.feedforward = SequentialCUDA()
             self.num_of_envs = envs_size
 
             self.xor_inputs = [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]]

@@ -1,6 +1,6 @@
 from neat.phenotypes import Phenotype
 from neat.neatTypes import NeuronType
-from neat.phenotypes import FeedforwardCUDA
+from neat.phenotypes import SequentialCUDA
 import numpy as np
 import math
 import networkx as nx
@@ -24,7 +24,7 @@ def test_single_edges():
 
     inputs = np.array([0.5, 0.5, 0.5])
 
-    feedforward_highest = FeedforwardCUDA()
+    feedforward_highest = SequentialCUDA()
 
     result = feedforward_highest.update([phenotype], [inputs])[0]
 
@@ -53,7 +53,7 @@ def test_multiple_edges():
 
     inputs = np.array([1, 1, 1])
 
-    feedforward_highest = FeedforwardCUDA()
+    feedforward_highest = SequentialCUDA()
 
     result = feedforward_highest.update([phenotype], [inputs])[0]
 
@@ -83,7 +83,7 @@ def test_hidden_nodes():
 
     inputs = np.array([1, 1, 1])
 
-    feedforward_highest = FeedforwardCUDA()
+    feedforward_highest = SequentialCUDA()
 
     result = feedforward_highest.update([phenotype], [inputs])[0]
 
@@ -115,7 +115,7 @@ def test_different_input():
 
     inputs = np.array([0.5, 0.2, 0.7])
 
-    feedforward_highest = FeedforwardCUDA()
+    feedforward_highest = SequentialCUDA()
 
     result = feedforward_highest.update([phenotype], [inputs])[0]
 
@@ -176,7 +176,7 @@ def test_multiple_phenotypes():
 
     inputs = np.array([1, 1])
 
-    feedforward_highest = FeedforwardCUDA()
+    feedforward_highest = SequentialCUDA()
 
     result_one = feedforward_highest.update([phenotype1], [inputs])
 
@@ -236,7 +236,7 @@ def test_custom():
 
     inputs = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.89, 0.996, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
-    feedforward_highest = FeedforwardCUDA()
+    feedforward_highest = SequentialCUDA()
 
     result = feedforward_highest.update([phenotype], [inputs])[0]
     print(result)
