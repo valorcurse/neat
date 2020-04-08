@@ -49,7 +49,7 @@ class MutationRates:
 
         self.mutationRate = 0.9
         self.chanceToMutateWeight = 0.8
-        self.chanceToMutateBias = 0.0
+        self.chanceToMutateBias = 0.7
         self.chanceToMutateActivation = 0.0
 
         self.chanceToDeleteLink = 0.0
@@ -70,7 +70,7 @@ class NeuronGene:
         
         # self.activation = self.relu
         # self.activation = self.leakyRelu
-        self.activation = self.tanh
+        self.activation = self.sigmoid
         self.bias = 0.0
 
         # self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
@@ -329,7 +329,7 @@ class Genome:
 
         ID = None
         if neuronType == NeuronType.HIDDEN:
-            ID = self.innovations.createNewNeuronInnovation(neuronType, fromID, toID)
+            ID = self.innovations.createNewNeuronInnovation(fromID, toID)
         else:
             notHidden = [n for n in self.neurons if n.neuronType != NeuronType.HIDDEN]
             ID = -len(notHidden)
@@ -382,7 +382,8 @@ class Genome:
         if random.random() > mutationRates.chanceToMutateBias:
             return False
 
-        random_neuron = random.choice(self.neurons)
+        neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
+        random_neuron = random.choice(neurons)
         random_neuron.bias += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
 
         return True

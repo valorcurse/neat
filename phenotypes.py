@@ -7,20 +7,14 @@ import numpy as np
 import numpy.ma as ma
 import networkx as nx
 import numba
-from numba import cuda, jit, vectorize, guvectorize, int64, float32
+from numba import cuda
 from numba.types import List
-import multiprocessing as mp
-# from pathos.multiprocessing import ProcessPool
-from joblib import Parallel, delayed
 
-import itertools
-
-import time
+import sys
 
 import neat.genes
 from neat.neatTypes import NeuronType
-# from neat.genes import NeuronGene, FuncsEnum
-# from neat.cuda_matmult import cu_square_matrix_mul
+from neat.utils import chunks
 
 from copy import deepcopy
 
@@ -70,12 +64,26 @@ class Phenotype:
         self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
 
-        # Adjacency matrix sorted topologically
-        self.adjacency_matrix = nx.adjacency_matrix(self.graph, nodelist=list(nx.topological_sort(self.graph))).todense()
-        # self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
+        sorted_nodes = list(nx.topological_sort(self.graph))
 
-        self.activations = np.array([neat.genes.FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
-        self.bias = np.array([self.graph.nodes()[n]['bias'] for n in self.graph.nodes()], dtype=np.int32)
+        # Adjacency matrix sorted topologically
+        self.adjacency_matrix = nx.adjacency_matrix(self.graph, nodelist=sorted_nodes).todense()
+        # self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
+        self.activations = []
+        for i in sorted_nodes:
+            node = self.graph.nodes()[i]
+            self.activations.append(neat.genes.FuncsEnum[node['activation'].__name__].value)
+        self.activations = np.array(self.activations, dtype=np.int32)
+
+        # self.activations = np.array([neat.genes.FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
+
+        self.bias = []
+        for i in sorted_nodes:
+            node = self.graph.nodes()[i]
+            self.bias.append(node['bias'])
+        self.bias = np.array(self.bias, dtype=np.float32)
+
+        # self.bias = np.array([self.graph.nodes()[n]['bias'] for n in self.graph.nodes()], dtype=np.float32)
 
         self.fitness = 0.0
 
@@ -151,29 +159,48 @@ class SequentialCUDA(object):
         return results
 
 '''
-Executes neuralnetworks on the GPU for environments that
+Executes neural networks on the GPU for environments that
 can be parallelized
 '''
 class ParallelCUDA(object):
 
 
     def __init__(self, X):
-        self.threadsperblock = 32
-        self.kernel = cuda.jit()(self.create_kernel(X))
+        self.threadsperblock = 891
+        self.max_global_data = 0x10000
+
+        print("Data size: {}".format(sys.getsizeof(X)))
+
+        # self.kernels = [cuda.jit()(self.create_kernel(x)) for x in chunks(X, self.max_global_data)]
+        chunk_size = self.max_global_data / (X.shape[1] * X.itemsize)
+        chunk_size = int(chunk_size / 100.0) * 100
+        self.kernels = [cuda.jit()(self.create_kernel(x)) for x in chunks(X, chunk_size)]
+
+
 
     def create_kernel(self, data):
         print("Created kernel: {}".format(data.size))
         def impl(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
-            i, j = cuda.grid(2)
+            # i, j = cuda.grid(2)
 
-            X = cuda.const.array_like(data)[j]
+            # i is de row of the data
+            i = numba.cuda.blockIdx.x
+            # j is de phenotype
+            j = numba.cuda.blockIdx.y
 
-            mem = all_mem[i]
-            adj = all_adj[i]
-            acts = all_acts[i]
-            bias = all_bias[i]
-            original_size = all_original_sizes[i]
-            results = all_results[i]
+            # i = numba.cuda.threadIdx
+
+            X = cuda.const.array_like(data)[i]
+
+            if j >= all_mem.shape[0]:
+                return
+
+            mem = all_mem[j][i]
+            adj = all_adj[j]
+            acts = all_acts[j]
+            bias = all_bias[j]
+            original_size = all_original_sizes[j]
+            results = all_results[j][i]
 
             # for x in range(X.shape[0]):
             #     mem[x] = X[x]
@@ -186,21 +213,22 @@ class ParallelCUDA(object):
 
         return impl
 
-    def update(self, phenotypes, X):
+    def update(self, phenotypes):
 
-        if type(X) is not np.ndarray:
-            X = np.array(X)
+        # if type(X) is not np.ndarray:
+        #     X = np.array(X)
 
         blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
 
+        # num_of_outputs = len(phenotypes[0].out_nodes)
         num_of_outputs = len(phenotypes[0].out_nodes)
 
-        assert X.shape == (len(phenotypes), len(phenotypes[0].in_nodes)), \
-            "Incorrect number of input values. There are {} instead of {}: {}".format(
-                X.shape,
-                (len(phenotypes), len(phenotypes[0].in_nodes)),
-                phenotypes[0].graph.nodes.data()
-            )
+        # assert X.shape == (len(phenotypes), len(phenotypes[0].in_nodes)), \
+        #     "Incorrect number of input values. There are {} instead of {}: {}".format(
+        #         X.shape,
+        #         (len(phenotypes), len(phenotypes[0].in_nodes)),
+        #         phenotypes[0].graph.nodes.data()
+        #     )
 
 
 
@@ -223,14 +251,14 @@ class ParallelCUDA(object):
         acts = np.array(acts, dtype=np.int32)
         bias = np.array(bias, dtype=np.float32)
 
-        mem = np.array([np.zeros(largest_adj_size, dtype=np.float32) for _ in phenotypes])
+        mem = np.array([np.zeros((largest_adj_size, X.shape[0]), dtype=np.float32) for _ in phenotypes])
 
         # Copy inputs to mem
         # for row_i, row in enumerate(mem):
         #     row[:X.shape[1]] = X[row_i]
 
 
-        results = np.array([np.zeros(num_of_outputs, dtype=np.float32) for _ in adj_matrices])
+        results = np.array([np.zeros((len(phenotypes), X.shape[0]), dtype=np.float32) for _ in adj_matrices])
 
         cuda_mem = cuda.to_device(mem)
         cuda_adj = cuda.to_device(adj_matrices)
@@ -239,10 +267,64 @@ class ParallelCUDA(object):
         cuda_original_sizes = cuda.to_device(original_sizes)
         cuda_results = cuda.to_device(results)
 
-        self.kernel[blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
-        results = cuda_results.copy_to_host()
+        results_head = 0
+        for kernel in self.kernels:
+            kernel[blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
+            copy_results = cuda_results.copy_to_host()
+            next_head = results_head + copy_results.shape[0]
+            results[results_head:next_head] = copy_results
+            results_head = next_head
+        # self.kernel[blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
+        #     results = cuda_results.copy_to_host()
 
         return results
+
+@cuda.jit(device=True)
+def feedForward(adj, acts, bias, mem):
+    adj_t = adj.T
+
+    for i in range(mem.size):
+        # print("###############")
+        function = acts[i]
+        weights = adj_t[i].T
+
+        sum = mem[i]
+        for j in range(weights.shape[0]):
+            weight = weights[j]
+            x = mem[j]
+
+            # print("x", x)
+            if weight == 0.0:
+                continue
+
+            # print(j, i, weight, x)
+            sum += x*weight
+            # print("sum", sum)
+
+        # print("bias:", bias[i])
+        sum += bias[i]
+        # print("sum", sum)
+        if function == 0: # Tanh
+            mem[i] = math.tanh(sum)
+        elif function == 1: # Sine
+            mem[i] = math.sin(sum)
+        elif function == 2: # Cosine
+            mem[i] = math.cos(sum)
+        elif function == 3: # Sigmoid
+            # print("sum", sum)
+            mem[i] = 1 / (1 + math.exp(-sum))
+            # print("sigmoid", mem[i])
+        elif function == 4: # Leaky ReLu
+            mem[i] = sum if sum > 0.0 else sum * 0.01
+        elif function == 5: # Linear
+            mem[i] = sum
+            # print("linear", mem[i])
+        elif function == 6: # Inverse
+            mem[i] = -sum
+        elif function == 7: # Absolute
+            mem[i] = abs(sum)
+        elif function == 8: # Step
+            mem[i] = 1.0 if sum > 0.0 else 0.0
 
 @cuda.jit(device=True)
 def feedForward_parallel(adj, acts, bias, mem, X):

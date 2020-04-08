@@ -20,33 +20,32 @@ from neat.genes import NeuronGene, LinkGene, MutationRates, Genome
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
 class MOConfiguration(PopulationConfiguration):
-    def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int, obj_ranges: List[Tuple[float, float]]):
+    def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int = 0):
         super().__init__(population_size, n_inputs, n_outputs)
 
         self._data["behavior_dimensions"] = behavior_dimensions
-        self._data["objective_ranges"] = obj_ranges
 
 class MOUpdate(SpeciesUpdate):
-    def __init__(self, fitness: np.ndarray, behaviors):
+    def __init__(self, fitness: np.ndarray, features):
         super().__init__(fitness)
 
-        self._data["behaviors"] = behaviors
+        self._data["features"] = features
 
 class MOPopulation(SpeciatedPopulation):
 
     def __init__(self, configuration: SpeciesConfiguration, innovations: Innovations, mutationRates: MutationRates):
         super().__init__(configuration, innovations, mutationRates)
 
-        encoding_dim = 8
-        self.behavior_dimensions = configuration.behavior_dimensions
+        # encoding_dim = 8
+        # self.behavior_dimensions = configuration.behavior_dimensions
 
         # Temp way to trigger aurora refinement
         self.epochs = 0
-        self.aurora = Aurora(encoding_dim, self.behavior_dimensions)
+        # self.aurora = Aurora(encoding_dim, self.behavior_dimensions)
+        #
+        # self.novelty_search = NoveltySearch(encoding_dim)
 
-        self.novelty_search = NoveltySearch(encoding_dim)
-
-        self.use_local_competition = False
+        # self.use_local_competition = False
 
     def newGenome(self, neurons: List[NeuronGene] = [], links: List[LinkGene] = [], parents=[]):
 
@@ -59,24 +58,35 @@ class MOPopulation(SpeciatedPopulation):
     @require(lambda update: isinstance(update, MOUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
 
-        features = self.aurora.characterize(update.behaviors)
+        # features = self.aurora.characterize(update.behaviors)
 
         super().updatePopulation(update)
 
-        fitnesses = np.array([g.fitness for g in self.genomes])
+        # fitnesses = np.array([g.fitness for g in self.genomes])
 
-        novelties = None
-        if self.use_local_competition:
-            novelties, fitnesses = self.novelty_search.calculate_local_competition(features, fitnesses)
-        else:
-            novelties = self.novelty_search.calculate_novelty(features, fitnesses)
-
-        for genome, novelty in zip(self.genomes, novelties):
-            genome.novelty = novelty
+        # novelties = None
+        # if self.use_local_competition:
+        #     novelties, fitnesses = self.novelty_search.calculate_local_competition(features, fitnesses)
+        # else:
+        #     novelties = self.novelty_search.calculate_novelty(features, fitnesses)
+        #
+        # for genome, novelty in zip(self.genomes, novelties):
+        #     genome.novelty = novelty
 
         # Fitness and novelty are made negative, because the non dominated sorting
         # is a minimalization algorithm
-        points = list(zip(-fitnesses, -novelties))
+        # points = list(zip(-fitnesses, -novelties))
+
+        inverse_fitness = -update.fitness
+        inverse_features = [-f for f in update.features]
+
+        if len(inverse_features) == 0:
+            # Padding zeroes
+            z = np.zeros((len(inverse_fitness)))
+            points = list(zip(*[inverse_fitness, z]))
+        else:
+            combined = inverse_fitness + inverse_features
+            points = list(zip(*combined))
 
         ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=points)
 
@@ -123,17 +133,9 @@ class MOPopulation(SpeciatedPopulation):
 
     def newGeneration(self) -> List[Genome]:
 
-        # nd_genomes = self.genomes
-        # Sort them first by rank and then crowding distance
-        nd_genomes = sorted(self.genomes, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))
-
-        space_to_fill = int(self.population_size / 10)
-        nd_genomes = nd_genomes[:space_to_fill]
-
         new_genomes = []
         for s in self.species:
-            reproduction_members = [g for g in nd_genomes if g in s.members]
-            s.members = reproduction_members
+            reproduction_members = copy(s.members)
 
             # Generate new baby genome
             to_spawn = max(0, s.numToSpawn - len(s.members))
@@ -162,3 +164,25 @@ class MOPopulation(SpeciatedPopulation):
             new_genomes += s.members
 
         return new_genomes
+
+    def reproduce(self) -> None:
+        self.generation += 1
+
+
+        for s in self.species:
+            nd_genomes = sorted(s.members, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))
+            space_to_fill = int(len(s.members) / 10)
+            s.members = nd_genomes[:space_to_fill]
+
+        self.genomes = [m for s in self.species for m in s.members]
+        # self.genomes = nd_genomes
+
+        # for s in self.species:
+        #     reproduction_members = [g for g in nd_genomes if g in s.members]
+        #     s.members = reproduction_members
+
+        self.speciateAll()
+
+        self.calculateSpawnAmount()
+
+        self.genomes = self.newGeneration()

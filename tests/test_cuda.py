@@ -1,9 +1,103 @@
-from neat.phenotypes import Phenotype
+from neat.phenotypes import Phenotype, SequentialCUDA, feedForward
 from neat.neatTypes import NeuronType
-from neat.phenotypes import SequentialCUDA
+from neat.genes import NeuronGene
+
+
+
 import numpy as np
 import math
 import networkx as nx
+from numba import cuda
+import matplotlib.pyplot as plt
+
+@cuda.jit()
+def call_feedforward(adj, acts, bias, mem, results):
+
+    feedForward(adj, acts, bias, mem)
+
+    for j in range(results.shape[0]):
+        results[j] = mem[-results.shape[0] + j]
+
+# def create_kernel(self, data):
+#     print("Created kernel: {}".format(data.size))
+#
+#     adj =
+#
+#     def impl(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
+#
+#         feedForward(adj, acts, bias, mem)
+
+def test_feedforward():
+    threadsperblock = 1
+    blockspergrid = 1
+
+    G = nx.DiGraph()
+    G.add_nodes_from([
+        (1, {"activation": NeuronGene.linear, "type": NeuronType.INPUT, "bias": 0.0, "pos": (-1.0, -1.0)}),
+        (2, {"activation": NeuronGene.linear, "type": NeuronType.INPUT, "bias": 0.0, "pos": (1.0, -1.0)}),
+        (3, {"activation": NeuronGene.sigmoid, "type": NeuronType.HIDDEN, "bias": 0.5, "pos": (-1.0, 0.0)}),
+        (4, {"activation": NeuronGene.sigmoid, "type": NeuronType.HIDDEN, "bias": -1.5, "pos": (1.0, 0.0)}),
+        (5, {"activation": NeuronGene.sigmoid, "type": NeuronType.OUTPUT, "bias": 1.5, "pos": (0.0, 1.0)})
+    ])
+
+    G.add_weighted_edges_from([
+        (1, 3, 1.0),
+        (2, 3, -1.0),
+
+        (1, 4, -1.0),
+        (2, 4, 1.0),
+
+        (3, 5, 1.0),
+        (4, 5, 1.0),
+    ])
+
+
+
+    X = np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]])
+    Y = np.array([0.0, 1.0, 1.0, 0.0])
+
+    pos = nx.get_node_attributes(G, "pos")
+
+
+    nx.draw_networkx(G, pos=pos)
+    plt.show()
+    phenotype = Phenotype(G, 0)
+    # adj = phenotype.adjacency_matrix
+    # acts = phenotype.activations
+    # bias = phenotype.bias
+
+
+
+    cuda_adj = cuda.to_device(phenotype.adjacency_matrix)
+    cuda_acts = cuda.to_device(phenotype.activations)
+    cuda_bias = cuda.to_device(phenotype.bias)
+
+    for x, y in zip(X, Y):
+        mem = np.zeros(phenotype.adjacency_matrix.shape[0])
+        for i, row in enumerate(x):
+            mem[i] = x[i]
+
+        print(" --------------------------")
+        print("mem: {}" .format(mem))
+        print("bias: {}" .format(phenotype.bias))
+        # print("x: {}" .format(x))
+
+        cuda_mem = cuda.to_device(mem)
+
+        results = np.zeros(2, dtype=np.float32)
+        cuda_results = cuda.to_device(results)
+
+        call_feedforward[blockspergrid, threadsperblock](cuda_adj, cuda_acts, cuda_bias, cuda_mem, cuda_results)
+
+        results = cuda_results.copy_to_host()
+        mem = cuda_mem.copy_to_host()
+
+        print("mem: {}".format(mem))
+        # print("x: {}".format(x))
+
+        print(mem)
+
+
 
 def test_single_edges():
     G = nx.DiGraph()
@@ -189,6 +283,34 @@ def test_multiple_phenotypes():
     # answers = np.tanh([hidden*0.1, 0.0])
     #
     # np.testing.assert_array_almost_equal(result, answers, decimal=4)
+
+def test_xor():
+    G = nx.DiGraph()
+    G.add_nodes_from([
+        (10, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(-1.0, -1.0)}),
+        (20, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(0.0, -1.0)}),
+        (30, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(1.0, -1.0)}),
+        (60, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias":0.0, "pos":(-1.0, 1.0)}),
+        (70, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias":0.0, "pos":(1.0, 1.0)})
+    ])
+
+    G.add_weighted_edges_from([
+        (20, 60, 0.4),
+        (30, 70, 0.1),
+    ])
+
+    phenotype = Phenotype(G, 0)
+
+    inputs = np.array([0.5, 0.5, 0.5])
+
+    feedforward_highest = SequentialCUDA()
+
+    result = feedforward_highest.update([phenotype], [inputs])[0]
+
+    norm_inputs = np.tanh(inputs)
+    answers = np.tanh([norm_inputs[0]*0.4, norm_inputs[1]*0.1])
+
+    np.testing.assert_array_almost_equal(result, answers)
 
 def test_custom():
     G = nx.DiGraph()

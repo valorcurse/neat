@@ -46,50 +46,36 @@ class NEAT:
         # Passed function that runs the evaluation environment
         self.eval_env = eval_env
 
-    def evaluate_vectorized(self, phenotypes) -> Tuple[np.ndarray, np.ndarray]:
-        all_features = np.empty((0, self.population_configuration.behavior_dimensions))
-        all_fitnesses = np.empty((0, ))
-        for chunk in chunks(phenotypes, self.eval_env.num_of_envs):
-            fitnesses, features = self.eval_env.evaluate(chunk)
 
-            assert fitnesses.shape == (len(chunk), ), \
-                "Chunk of fitnesses have shape {} instead of {}.".format(fitnesses.shape, (len(chunk), ))
-            assert features.shape == (len(chunk), self.population_configuration.behavior_dimensions), \
-                "Chunk of states have shape {} instead of {}.".format(features.shape, (len(chunk), self.population_configuration.behavior_dimensions))
 
-            all_features = np.vstack((all_features, features))
-            all_fitnesses = np.hstack((all_fitnesses, fitnesses))
+    def evaluate(self):
+        pass
 
-        assert all_fitnesses.shape[0] == len(phenotypes), "Combined fitnesses have size {} instead of {}.".format(len(all_fitnesses), len(phenotypes))
-        assert all_features.shape[0] == len(phenotypes), "Combined states have size {} instead of {}.".format(len(all_features), len(phenotypes))
+    def _epoch(self):
+        pass
 
-        # This is just for debugging
-        for phenotype, fitness in zip(phenotypes, all_fitnesses):
-            phenotype.fitness = fitness
-
-        return (np.array(all_fitnesses), np.array(all_features))
-
+        # if self.epochs in self.refinement_epochs:
+        #     self.population.refine_behaviors(self.evaluate_vectorized)
+        #
+        # self.population.reproduce()
+        #
+        # self.phenotypes = self.population.create_phenotypes()
+        # fitnesses, states = self.evaluate_vectorized(self.phenotypes)
+        #
+        # if isinstance(self.population_configuration, MapElitesConfiguration):
+        #     self.population.updatePopulation(MapElitesUpdate(fitnesses, states))
+        #
+        # elif isinstance(self.population_configuration, SpeciesConfiguration):
+        #     self.population.updatePopulation(SpeciesUpdate(fitnesses))
+        #
+        # elif isinstance(self.population_configuration, MOConfiguration):
+        #     self.population.updatePopulation(MOUpdate(fitnesses, states))
 
     def epoch(self):
 
         while True:
             self.epochs += 1
 
-            if self.epochs in self.refinement_epochs:
-                self.population.refine_behaviors(self.evaluate_vectorized)
-
-            self.population.reproduce()
-
-            self.phenotypes = self.population.create_phenotypes()
-            fitnesses, states = self.evaluate_vectorized(self.phenotypes)
-
-            if isinstance(self.population_configuration, MapElitesConfiguration):
-                self.population.updatePopulation(MapElitesUpdate(fitnesses, states))
-
-            elif isinstance(self.population_configuration, SpeciesConfiguration):
-                self.population.updatePopulation(SpeciesUpdate(fitnesses))
-
-            elif isinstance(self.population_configuration, MOConfiguration):
-                self.population.updatePopulation(MOUpdate(fitnesses, states))
+            self._epoch()
 
             yield

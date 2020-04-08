@@ -17,6 +17,9 @@ class Innovation:
     def __eq__(self, other: object) -> bool:
         return self.innovationType == other if isinstance(other, Innovation) else NotImplemented
 
+    def __repr__(self):
+        return "Innovation: {} | ID: {} | from: {} | to: {})".format(self.innovationType, self.innovationID, self.start, self.end)
+
 class Innovations:
     def __init__(self) -> None:
         self.listOfInnovations: List[Innovation] = []
@@ -27,20 +30,20 @@ class Innovations:
         ID: int = self.checkInnovation(fromID, toID, InnovationType.LINK)
 
         if (ID == -1):
-            newInnovation = Innovation(InnovationType.LINK, len(self.listOfInnovations), fromID, toID)
-            self.listOfInnovations.append(newInnovation)
             ID = len(self.listOfInnovations)
+            newInnovation = Innovation(InnovationType.LINK, ID, fromID, toID)
+            self.listOfInnovations.append(newInnovation)
 
         return ID
 
-    def createNewNeuronInnovation(self, neuronType: NeuronType, fromID: Optional[int], toID: Optional[int]) -> int:
+    def createNewNeuronInnovation(self, fromID: Optional[int], toID: Optional[int]) -> int:
         ID = self.checkInnovation(fromID, toID, InnovationType.NEURON)
 
         if (ID == -1):
+            ID = len(self.listOfInnovations)
             newInnovation = Innovation(InnovationType.NEURON, ID, fromID, toID)
             self.listOfInnovations.append(newInnovation)
-            ID = len(self.listOfInnovations)
-        
+
         return ID
 
     def checkInnovation(self, start: Optional[int], end: Optional[int], innovationType: InnovationType, neuronID: Optional[int] = None) -> int:

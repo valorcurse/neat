@@ -238,7 +238,7 @@ class SpeciatedPopulation(Population):
         closest_species = np.argmin(distances)
 
         # If it doesn't fit anywhere, create new species
-        if distances[closest_species] > self.mutationRates.newSpeciesTolerance:
+        if distances[closest_species] >= self.mutationRates.newSpeciesTolerance:
             self.speciesNumber += 1
             self.species.append(Species(self.speciesNumber, genome))
         else:
@@ -279,8 +279,8 @@ class SpeciatedPopulation(Population):
                     member = random.choice(reproduction_members)
                     baby = deepcopy(member)
                     baby.mutate(self.mutationRates)
-                else:
 
+                else:
                     # Tournament selection
                     randomMembers = lambda: [random.choice(reproduction_members) for _ in range(2)]
                     g1 = self.tournament_selection(randomMembers())
