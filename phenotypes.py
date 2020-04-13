@@ -166,34 +166,30 @@ class ParallelCUDA(object):
 
 
     def __init__(self, X):
-        self.threadsperblock = 891
+        self.threadsperblock = (20, 20)
         self.max_global_data = 0x10000
+
+        self.X = X
 
         print("Data size: {}".format(sys.getsizeof(X)))
 
-        # self.kernels = [cuda.jit()(self.create_kernel(x)) for x in chunks(X, self.max_global_data)]
         chunk_size = self.max_global_data / (X.shape[1] * X.itemsize)
         chunk_size = int(chunk_size / 100.0) * 100
         self.kernels = [cuda.jit()(self.create_kernel(x)) for x in chunks(X, chunk_size)]
 
 
 
+
+
     def create_kernel(self, data):
         print("Created kernel: {}".format(data.size))
         def impl(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
-            # i, j = cuda.grid(2)
-
             # i is de row of the data
-            i = numba.cuda.blockIdx.x
+            i = cuda.threadIdx.y
             # j is de phenotype
-            j = numba.cuda.blockIdx.y
-
-            # i = numba.cuda.threadIdx
+            j = cuda.threadIdx.x
 
             X = cuda.const.array_like(data)[i]
-
-            if j >= all_mem.shape[0]:
-                return
 
             mem = all_mem[j][i]
             adj = all_adj[j]
@@ -202,14 +198,16 @@ class ParallelCUDA(object):
             original_size = all_original_sizes[j]
             results = all_results[j][i]
 
-            # for x in range(X.shape[0]):
-            #     mem[x] = X[x]
-            #
+            for k in range(mem.shape[0]):
+                mem[k] = X[k]
+
             feedForward_parallel(adj, acts, bias, mem, X)
 
             size_diff = mem.shape[0] - original_size
             for k in range(results.shape[0]):
-                results[i] = mem[-(results.shape[0] + size_diff) + k]
+                results[k] = mem[-(results.shape[0] + size_diff) + k]
+
+            # print(results)
 
         return impl
 
@@ -218,7 +216,8 @@ class ParallelCUDA(object):
         # if type(X) is not np.ndarray:
         #     X = np.array(X)
 
-        blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
+        # blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
+        blockspergrid = 1
 
         # num_of_outputs = len(phenotypes[0].out_nodes)
         num_of_outputs = len(phenotypes[0].out_nodes)
@@ -229,8 +228,6 @@ class ParallelCUDA(object):
         #         (len(phenotypes), len(phenotypes[0].in_nodes)),
         #         phenotypes[0].graph.nodes.data()
         #     )
-
-
 
         adj_matrices = [p.adjacency_matrix for p in phenotypes]
         acts = [p.activations for p in phenotypes]
@@ -251,14 +248,9 @@ class ParallelCUDA(object):
         acts = np.array(acts, dtype=np.int32)
         bias = np.array(bias, dtype=np.float32)
 
-        mem = np.array([np.zeros((largest_adj_size, X.shape[0]), dtype=np.float32) for _ in phenotypes])
+        mem = np.zeros((len(phenotypes), self.X.shape[0], largest_adj_size), dtype=np.float32)
 
-        # Copy inputs to mem
-        # for row_i, row in enumerate(mem):
-        #     row[:X.shape[1]] = X[row_i]
-
-
-        results = np.array([np.zeros((len(phenotypes), X.shape[0]), dtype=np.float32) for _ in adj_matrices])
+        results = np.zeros((len(phenotypes), self.X.shape[0], num_of_outputs), dtype=np.float32)
 
         cuda_mem = cuda.to_device(mem)
         cuda_adj = cuda.to_device(adj_matrices)
@@ -269,13 +261,14 @@ class ParallelCUDA(object):
 
         results_head = 0
         for kernel in self.kernels:
-            kernel[blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
+            threads_dim = (len(phenotypes), self.X.shape[0])
+            kernel[blockspergrid, threads_dim](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
+
             copy_results = cuda_results.copy_to_host()
             next_head = results_head + copy_results.shape[0]
             results[results_head:next_head] = copy_results
             results_head = next_head
-        # self.kernel[blockspergrid, self.threadsperblock](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
-        #     results = cuda_results.copy_to_host()
+
 
         return results
 
@@ -330,19 +323,22 @@ def feedForward(adj, acts, bias, mem):
 def feedForward_parallel(adj, acts, bias, mem, X):
     adj_t = adj.T
 
+    # print(mem)
     for i in range(mem.shape[0]):
         function = acts[i]
         weights = adj_t[i].T
 
         sum = 0.0
         for j in range(weights.shape[0]):
-            x = X[i] if i < X.size else mem[i]
+            x = X[i] if i < X.shape[0] else mem[i]
             weight = weights[j]
 
-            if function == 6:
-                sum = max(sum, x*weight)
-            else:
-                sum += x*weight
+            # if function == 6:
+            #     sum = max(sum, x*weight)
+            # else:
+            sum += x*weight
+
+
 
         sum += bias[i]
         if function == 0:

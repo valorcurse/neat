@@ -6,13 +6,12 @@ from prettytable import PrettyTable
 from neat.main.speciatedFitnessNeat import SpeciatedFitnessNeat
 from neat.neatTypes import NeuronType
 from neat.evaluation import FitnessEvaluation
-from neat.phenotypes import Phenotype, SequentialCUDA
+from neat.phenotypes import Phenotype, ParallelCUDA
 from neat.multiobjectivePopulation import MOConfiguration
 
 
 if __name__ == '__main__':
-    pop_size = 150
-    envs_size = 150
+    pop_size = 100
     inputs = 2
     outputs = 1
 
@@ -20,22 +19,20 @@ if __name__ == '__main__':
     class TestOrganism(FitnessEvaluation):
 
         def __init__(self):
-            self.feedforward = SequentialCUDA()
-            self.num_of_envs = envs_size
+            self.xor_inputs = np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]])
+            self.xor_outputs = np.array([0.0, 1.0, 1.0, 0.0])
 
-            self.xor_inputs = [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]]
-            self.xor_outputs = [0.0, 1.0, 1.0, 0.0]
+            self.feedforward = ParallelCUDA(self.xor_inputs)
+
 
         def run_environment(self, phenotypes: List[Phenotype]) -> List[np.array]:
-            fitnesses = np.full((len(phenotypes), 1), 4.0)
-            for xi, xo in zip(self.xor_inputs, self.xor_outputs):
-                output = self.feedforward.update(phenotypes, np.array([xi,]*len(phenotypes)))
-                error = (output - xo) ** 2
-                fitnesses -= error
-                # print(output.T)
-                # print(fitnesses)
+            output = self.feedforward.update(phenotypes)
 
-            fitnesses = fitnesses.flatten()
+            fitnesses = np.full(len(phenotypes), 4.0)
+            error = np.sum((output.reshape(-1, output.shape[1]) - self.xor_outputs) ** 2, axis=1)
+            fitnesses -= error
+
+            print(np.argmin(fitnesses))
 
             return [np.array(fitnesses[:len(phenotypes)])]
 
