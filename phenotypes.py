@@ -242,22 +242,30 @@ class ParallelCUDA(object):
             X = cuda.const.array_like(data)
 
             mem = all_mem[p]
+
             adj = all_adj[p]
             acts = all_acts[p]
             bias = all_bias[p]
             layers = all_layers[p]
             original_size = all_original_sizes[p]
-            results = all_results[p][i]
+            results = all_results[p]
 
             size_diff = mem.shape[0] - original_size
 
             # Loop through all training vectors
             for x_i in range(X.shape[0]):
                 x = X[x_i]
-                feedForward_parallel(adj, acts, bias, mem, layers, x)
 
-                for k in range(results.shape[0]):
-                    results[k] = mem[-(results.shape[0] + size_diff) + k]
+                for k in range(x.shape[0]):
+                    mem[k] = x[k]
+
+                feedForward_parallel(adj, acts, bias, mem, layers)
+
+                for k in range(results.shape[1]):
+                    results[x_i][k] = mem[-(results.shape[0] + size_diff) + k - 1]
+
+
+            some_var = 0
 
         return impl
 
@@ -334,6 +342,7 @@ class ParallelCUDA(object):
 
 
         results = cuda_results.copy_to_host()
+        mem = cuda_mem.copy_to_host()
 
         return results
 
@@ -385,7 +394,7 @@ def feedForward(adj, acts, bias, mem):
             mem[i] = 1.0 if sum > 0.0 else 0.0
 
 @cuda.jit(device=True)
-def feedForward_parallel(adj, acts, bias, mem, layers, X):
+def feedForward_parallel(adj, acts, bias, mem, layers):
     # i'th node
     i = cuda.threadIdx.x
 
@@ -395,7 +404,7 @@ def feedForward_parallel(adj, acts, bias, mem, layers, X):
 
         node = layers[l][i]
 
-        if node == -1:
+        if l == 0 or node == -1:
             continue
 
         weights = adj.T[node]
@@ -404,6 +413,7 @@ def feedForward_parallel(adj, acts, bias, mem, layers, X):
         sum = bias[node]
         for j in range(weights.size):
             w = weights[j]
+            # x = X[j] if l == 0 else mem[j]
             x = mem[j]
 
             sum += w * x

@@ -1,4 +1,4 @@
-from neat.phenotypes import Phenotype, SequentialCUDA, feedForward
+from neat.phenotypes import Phenotype, SequentialCUDA, ParallelCUDA, feedForward
 from neat.neatTypes import NeuronType
 from neat.genes import NeuronGene
 
@@ -102,28 +102,27 @@ def test_feedforward():
 def test_single_edges():
     G = nx.DiGraph()
     G.add_nodes_from([
-        (10, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(-1.0, -1.0)}),
-        (20, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(0.0, -1.0)}),
-        (30, {"activation": np.tanh, "type": NeuronType.INPUT, "bias":0.0, "pos":(1.0, -1.0)}),
-        (60, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias":0.0, "pos":(-1.0, 1.0)}),
-        (70, {"activation": np.tanh, "type": NeuronType.OUTPUT, "bias":0.0, "pos":(1.0, 1.0)})
+        (1, {"activation": NeuronGene.linear, "type": NeuronType.INPUT, "bias": 0.0, "pos":(-1.0, -1.0)}),
+        (2, {"activation": NeuronGene.linear, "type": NeuronType.INPUT, "bias": 0.0, "pos":(0.0, -1.0)}),
+        (3, {"activation": NeuronGene.linear, "type": NeuronType.INPUT, "bias": 0.0, "pos":(1.0, -1.0)}),
+        (4, {"activation": NeuronGene.sigmoid, "type": NeuronType.OUTPUT, "bias": 0.0, "pos":(-1.0, 1.0)}),
+        (5, {"activation": NeuronGene.sigmoid, "type": NeuronType.OUTPUT, "bias": 0.0, "pos":(1.0, 1.0)})
     ])
 
     G.add_weighted_edges_from([
-        (20, 60, 0.4),
-        (30, 70, 0.1),
+        (2, 4, 0.4),
+        (3, 5, 0.1),
     ])
 
     phenotype = Phenotype(G, 0)
 
-    inputs = np.array([0.5, 0.5, 0.5])
+    inputs = np.array([[1.0, 1.0, 1.0]])
 
-    feedforward_highest = SequentialCUDA()
+    feedforward = ParallelCUDA(inputs)
 
-    result = feedforward_highest.update([phenotype], [inputs])[0]
+    result = feedforward.update([phenotype])[0][0]
 
-    norm_inputs = np.tanh(inputs)
-    answers = np.tanh([norm_inputs[0]*0.4, norm_inputs[1]*0.1])
+    answers = [NeuronGene.sigmoid(inputs[0][0]*0.4), NeuronGene.sigmoid(inputs[0][1]*0.1)]
 
     np.testing.assert_array_almost_equal(result, answers)
 
