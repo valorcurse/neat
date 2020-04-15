@@ -32,8 +32,6 @@ if __name__ == '__main__':
             error = np.sum((output.reshape(-1, output.shape[1]) - self.xor_outputs) ** 2, axis=1)
             fitnesses -= error
 
-            print(np.argmin(fitnesses))
-
             return [np.array(fitnesses[:len(phenotypes)])]
 
         def evaluate(self, phenotypes: List[Phenotype]) -> List[np.array]:

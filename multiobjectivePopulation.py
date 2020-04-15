@@ -88,6 +88,8 @@ class MOPopulation(SpeciatedPopulation):
             combined = inverse_fitness + inverse_features
             points = list(zip(*combined))
 
+        points = np.array(points)
+
         ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=points)
 
         for i in range(len(ndf)):

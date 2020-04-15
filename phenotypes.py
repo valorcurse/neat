@@ -64,13 +64,17 @@ class Phenotype:
         self.in_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.INPUT]
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
 
-        sorted_nodes = list(nx.topological_sort(self.graph))
+        # sorted_nodes = list(nx.topological_sort(self.graph))
 
         # Adjacency matrix sorted topologically
-        self.adjacency_matrix = nx.adjacency_matrix(self.graph, nodelist=sorted_nodes).todense()
+        # self.adjacency_matrix = nx.adjacency_matrix(self.graph, nodelist=sorted_nodes).todense()
+        self.adjacency_matrix = nx.adjacency_matrix(self.graph).todense()
+
+        self.layers = self.define_layers()
+
         # self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
         self.activations = []
-        for i in sorted_nodes:
+        for i in self.graph.nodes:
             node = self.graph.nodes()[i]
             self.activations.append(neat.genes.FuncsEnum[node['activation'].__name__].value)
         self.activations = np.array(self.activations, dtype=np.int32)
@@ -78,7 +82,7 @@ class Phenotype:
         # self.activations = np.array([neat.genes.FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
 
         self.bias = []
-        for i in sorted_nodes:
+        for i in self.graph.nodes:
             node = self.graph.nodes()[i]
             self.bias.append(node['bias'])
         self.bias = np.array(self.bias, dtype=np.float32)
@@ -86,6 +90,42 @@ class Phenotype:
         # self.bias = np.array([self.graph.nodes()[n]['bias'] for n in self.graph.nodes()], dtype=np.float32)
 
         self.fitness = 0.0
+
+    def define_layers(self):
+        nodes = list(self.graph.nodes)
+
+        height = nx.dag_longest_path_length(self.graph, weight='') + 1
+        layers = []
+        for _ in range(height):
+            layers.append([])
+
+        for n in self.graph.nodes:
+            longest_paths = []
+
+            for s in self.in_nodes:
+                path_lengths = [len(x) for x in list(nx.all_simple_paths(self.graph, s[0], n))]
+                max_length = 0 if len(path_lengths) == 0 else max(path_lengths) - 1
+                # max_length = max(path_lengths) - 1 if max(path_lengths) > 0 else 0
+                longest_paths.append(max_length)
+
+            longest_path = max(longest_paths)
+            layers[longest_path].append(n)
+
+        # print(layers)
+
+
+        width = max(len(l) for l in layers)
+        id_layers = np.full((height, width), -1)
+
+        # sorted_nodes = list(nx.topological_sort(self.graph))
+        for i in range(len(id_layers)):
+            layer = layers[i]
+            sorted_indexes = [nodes.index(n) for n in layer]
+            id_layers[i, :len(layer)] = sorted_indexes
+
+        return id_layers
+
+
 
     def update(self, X):
         pass
@@ -169,45 +209,55 @@ class ParallelCUDA(object):
         self.threadsperblock = (20, 20)
         self.max_global_data = 0x10000
 
-        self.X = X
+        self.X = X.astype(np.float32)
 
-        print("Data size: {}".format(sys.getsizeof(X)))
+        # print("Data size: {}".format(sys.getsizeof(X)))
 
-        chunk_size = self.max_global_data / (X.shape[1] * X.itemsize)
-        chunk_size = int(chunk_size / 100.0) * 100
-        self.kernels = [cuda.jit()(self.create_kernel(x)) for x in chunks(X, chunk_size)]
+        self.kernel = cuda.jit()(self.create_kernel(self.X))
 
+        # chunk_size = self.max_global_data / (X.shape[1] * X.itemsize)
+        # chunk_size = int(chunk_size / 100.0) * 100
+        # chunk_size = int(chunk_size / 10)
 
-
+        # self.kernels = []
+        # for x in chunks(X, chunk_size):
+        #     data = x.astype(np.float32)
+        #     kernel = cuda.jit()(self.create_kernel(data))
+        #     # self.kernels.append() = [cuda.jit()(self.create_kernel(x)) for x in chunks(X, chunk_size)]
+        #     kernel.chunk_size = x.shape[0]
+        #     self.kernels.append(kernel)
 
 
     def create_kernel(self, data):
         print("Created kernel: {}".format(data.size))
-        def impl(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
-            # i is de row of the data
-            i = cuda.threadIdx.y
-            # j is de phenotype
-            j = cuda.threadIdx.x
+        def impl(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_layers, all_results):
 
-            X = cuda.const.array_like(data)[i]
+            # p is the phenotype
+            p = cuda.blockIdx.x
 
-            mem = all_mem[j][i]
-            adj = all_adj[j]
-            acts = all_acts[j]
-            bias = all_bias[j]
-            original_size = all_original_sizes[j]
-            results = all_results[j][i]
+            # i is the thread
+            i = cuda.threadIdx.x
 
-            for k in range(mem.shape[0]):
-                mem[k] = X[k]
+            # Training data
+            X = cuda.const.array_like(data)
 
-            feedForward_parallel(adj, acts, bias, mem, X)
+            mem = all_mem[p]
+            adj = all_adj[p]
+            acts = all_acts[p]
+            bias = all_bias[p]
+            layers = all_layers[p]
+            original_size = all_original_sizes[p]
+            results = all_results[p][i]
 
             size_diff = mem.shape[0] - original_size
-            for k in range(results.shape[0]):
-                results[k] = mem[-(results.shape[0] + size_diff) + k]
 
-            # print(results)
+            # Loop through all training vectors
+            for x_i in range(X.shape[0]):
+                x = X[x_i]
+                feedForward_parallel(adj, acts, bias, mem, layers, x)
+
+                for k in range(results.shape[0]):
+                    results[k] = mem[-(results.shape[0] + size_diff) + k]
 
         return impl
 
@@ -216,10 +266,6 @@ class ParallelCUDA(object):
         # if type(X) is not np.ndarray:
         #     X = np.array(X)
 
-        # blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
-        blockspergrid = 1
-
-        # num_of_outputs = len(phenotypes[0].out_nodes)
         num_of_outputs = len(phenotypes[0].out_nodes)
 
         # assert X.shape == (len(phenotypes), len(phenotypes[0].in_nodes)), \
@@ -232,43 +278,62 @@ class ParallelCUDA(object):
         adj_matrices = [p.adjacency_matrix for p in phenotypes]
         acts = [p.activations for p in phenotypes]
         bias = [p.bias for p in phenotypes]
+        layers = [p.layers for p in phenotypes]
 
         largest_adj_size = max([n.shape[0] for n in adj_matrices])
         original_sizes = np.zeros(len(phenotypes), dtype=np.int32)
         # Pad all matrices to conform with the largest network
-        for i, (adj, act, bia) in enumerate(zip(adj_matrices, acts, bias)):
+        for i, (adj, act, bia, layer) in enumerate(zip(adj_matrices, acts, bias, layers)):
             original_sizes[i] = adj.shape[0]
-            new_size = largest_adj_size - adj.shape[0]
+            padding = largest_adj_size - adj.shape[0]
 
-            adj_matrices[i] = np.pad(adj, [(0, new_size), (0, new_size)], mode='constant')
-            acts[i] = np.pad(act, [(0, new_size)], mode='constant')
-            bias[i] = np.pad(bia, [(0, new_size)], mode='constant')
+            adj_matrices[i] = np.pad(adj, [(0, padding), (0, padding)], mode='constant')
+            acts[i] = np.pad(act, [(0, padding)], mode='constant')
+            bias[i] = np.pad(bia, [(0, padding)], mode='constant')
+
+        widest_layer = max([len(l) for n in layers for l in n])
+        highest_layer = max([len(n) for n in layers])
+        for i, layer in enumerate(layers):
+            width_padding = widest_layer - layer.shape[1]
+            height_padding = highest_layer - layer.shape[0]
+
+            layers[i] = np.pad(layer, [(0, height_padding), (0, width_padding)], mode='constant', constant_values=-1)
+
 
         adj_matrices = np.array(adj_matrices, dtype=np.float32)
         acts = np.array(acts, dtype=np.int32)
         bias = np.array(bias, dtype=np.float32)
+        layers = np.array(layers, dtype=np.int32)
 
-        mem = np.zeros((len(phenotypes), self.X.shape[0], largest_adj_size), dtype=np.float32)
-
-        results = np.zeros((len(phenotypes), self.X.shape[0], num_of_outputs), dtype=np.float32)
-
-        cuda_mem = cuda.to_device(mem)
         cuda_adj = cuda.to_device(adj_matrices)
         cuda_acts = cuda.to_device(acts)
         cuda_bias = cuda.to_device(bias)
+        cuda_layers = cuda.to_device(layers)
         cuda_original_sizes = cuda.to_device(original_sizes)
+
+        cuda_data = cuda.to_device(self.X)
+
+        mem = np.zeros((len(phenotypes), largest_adj_size), dtype=np.float32)
+        cuda_mem = cuda.to_device(mem)
+
+        results = np.zeros((len(phenotypes), self.X.shape[0], num_of_outputs), dtype=np.float32)
         cuda_results = cuda.to_device(results)
 
-        results_head = 0
-        for kernel in self.kernels:
-            threads_dim = (len(phenotypes), self.X.shape[0])
-            kernel[blockspergrid, threads_dim](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
+        # Max 48 kb?
+        all_data = cuda_mem.nbytes + cuda_adj.nbytes + cuda_acts.nbytes + cuda_bias.nbytes + cuda_original_sizes.nbytes + cuda_results.nbytes + cuda_data.nbytes
+        print("Data size: {}".format(sys.getsizeof(all_data)))
 
-            copy_results = cuda_results.copy_to_host()
-            next_head = results_head + copy_results.shape[0]
-            results[results_head:next_head] = copy_results
-            results_head = next_head
 
+        blocks = len(phenotypes)
+        threads = widest_layer
+
+        self.kernel[blocks, threads](cuda_mem, cuda_adj,
+                                          cuda_acts, cuda_bias, cuda_original_sizes,
+                                          cuda_layers, cuda_results)
+
+
+
+        results = cuda_results.copy_to_host()
 
         return results
 
@@ -320,39 +385,83 @@ def feedForward(adj, acts, bias, mem):
             mem[i] = 1.0 if sum > 0.0 else 0.0
 
 @cuda.jit(device=True)
-def feedForward_parallel(adj, acts, bias, mem, X):
-    adj_t = adj.T
+def feedForward_parallel(adj, acts, bias, mem, layers, X):
+    # i'th node
+    i = cuda.threadIdx.x
 
-    # print(mem)
-    for i in range(mem.shape[0]):
-        function = acts[i]
-        weights = adj_t[i].T
+    for l in range(layers.shape[0]):
 
-        sum = 0.0
-        for j in range(weights.shape[0]):
-            x = X[i] if i < X.shape[0] else mem[i]
-            weight = weights[j]
+        cuda.syncthreads()
 
-            # if function == 6:
-            #     sum = max(sum, x*weight)
-            # else:
-            sum += x*weight
+        node = layers[l][i]
+
+        if node == -1:
+            continue
+
+        weights = adj.T[node]
+
+        # Loop through adjacency matrix
+        sum = bias[node]
+        for j in range(weights.size):
+            w = weights[j]
+            x = mem[j]
+
+            sum += w * x
+
+        sum = activate(sum, acts[node])
+
+        mem[node] = sum
 
 
+@cuda.jit(device=True)
+def activate(x, function):
+    if function == 0:
+        return math.tanh(x)
+    elif function == 1:
+        return math.sin(x)
+    elif function == 2:
+        return math.cos(x)
+    elif function == 3:
+        return 1 / (1 + math.exp(-x))  # Sigmoid
+    elif function == 4:
+        return x if x > 0.0 else x * 0.01  # Leaky ReLu
+    elif function == 5:
+        return x  # Linear
 
-        sum += bias[i]
-        if function == 0:
-            mem[i] = math.tanh(sum)
-        elif function == 1:
-            mem[i] = math.sin(sum)
-        elif function == 2:
-            mem[i] = math.cos(sum)
-        elif function == 3:
-            mem[i] = 1 / (1 + math.exp(-sum))  # Sigmoid
-        elif function == 4:
-            mem[i] = sum if sum > 0.0 else sum * 0.01  # Leaky ReLu
-        elif function == 5:
-            mem[i] = sum  # Linear
+# @cuda.jit(device=True)
+# def feedForward_parallel(adj, acts, bias, mem, X):
+#     adj_t = adj.T
+#
+#     # print(mem)
+#     for i in range(mem.shape[0]):
+#         function = acts[i]
+#         weights = adj_t[i].T
+#
+#         sum = 0.0
+#         for j in range(weights.shape[0]):
+#             x = X[i] if i < X.shape[0] else mem[i]
+#             weight = weights[j]
+#
+#             # if function == 6:
+#             #     sum = max(sum, x*weight)
+#             # else:
+#             sum += x*weight
+#
+#
+#
+#         sum += bias[i]
+#         if function == 0:
+#             mem[i] = math.tanh(sum)
+#         elif function == 1:
+#             mem[i] = math.sin(sum)
+#         elif function == 2:
+#             mem[i] = math.cos(sum)
+#         elif function == 3:
+#             mem[i] = 1 / (1 + math.exp(-sum))  # Sigmoid
+#         elif function == 4:
+#             mem[i] = sum if sum > 0.0 else sum * 0.01  # Leaky ReLu
+#         elif function == 5:
+#             mem[i] = sum  # Linear
 
 class SubstrateCUDA(object):
 
@@ -433,6 +542,35 @@ def execute_network(all_mem, all_adj, all_acts, all_bias, all_original_sizes, al
     size_diff = results.shape[0] - original_size
     for j in range(results.shape[0]):
         results[j] = mem[-(results.shape[0] + size_diff) + j]
+
+# @cuda.jit()
+# def execute_network2(data, all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
+#     # i is the row of the data
+#     i = cuda.threadIdx.y
+#     # j is the phenotype
+#     j = cuda.threadIdx.x
+#
+#     # X = cuda.const.array_like(data)[i]
+#     X = data[i]
+#
+#     mem = all_mem[j][i]
+#     adj = all_adj[j]
+#     acts = all_acts[j]
+#     bias = all_bias[j]
+#     original_size = all_original_sizes[j]
+#     results = all_results[j][i]
+#
+#     # print(mem.shape, X.shape)
+#     for k in range(X.shape[0]):
+#         mem[k] = X[k]
+#
+#     feedForward_parallel(adj, acts, bias, mem, X)
+#
+#     size_diff = mem.shape[0] - original_size
+#     for k in range(results.shape[0]):
+#         results[k] = mem[-(results.shape[0] + size_diff) + k]
+
+    # print(results)
 
 @cuda.jit()
 def calc_substrate(X, Y, adj, acts, mems, results):
