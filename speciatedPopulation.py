@@ -62,10 +62,13 @@ class Species:
             m.adjustedFitness = m.fitness / len(self.members)
 
 
-    def becomeOlder(self) -> None:
+    def becomeOlder(self, allowStagnation) -> None:
         self.age += 1
 
         highestFitness = max([m.fitness for m in self.members])
+
+        if not allowStagnation:
+            return
 
         # Check if species is stagnant
         if (highestFitness <= self.highestFitness):
@@ -160,11 +163,11 @@ class SpeciatedPopulation(Population):
 
         # Age species and remove stagnant species
         for s in self.species:
-            if s != best_species:
-                s.becomeOlder()
+            # if s != best_species:
+            s.becomeOlder(s != best_species)
 
-                if s.stagnant and len(self.species) > 1:
-                    self.species.remove(s)
+            if s.stagnant and len(self.species) > 1:
+                self.species.remove(s)
         
         for s in self.species:
             s.adjustFitnesses()
@@ -230,7 +233,7 @@ class SpeciatedPopulation(Population):
     def speciate(self, genome) -> None:
 
         # if random.random() > 0.01:
-        if random.random() > 1.0:
+        if random.random() > 0.01:
             random.choice(genome.parents).species.addMember(genome)
             return
 

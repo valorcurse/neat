@@ -71,10 +71,12 @@ class Phenotype:
         self.out_nodes = [n for n in self.graph.nodes.data() if n[1]['type'] == NeuronType.OUTPUT]
 
         # Adjacency matrix sorted topologically
-        self.adjacency_matrix = nx.adjacency_matrix(self.graph, nodelist=list(nx.topological_sort(self.graph))).todense()
+        sorted_nodes = list(nx.topological_sort(self.graph))
+        self.adjacency_matrix = nx.adjacency_matrix(self.graph, nodelist=sorted_nodes).todense()
         # self.adjacency_matrix = nx.to_numpy_matrix(self.graph, dtype=np.float32)
 
-        self.activations = np.array([neat.genes.FuncsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
+        # self.activations = np.array([neat.genes.ActivationsEnum[self.graph.nodes()[n]['activation'].__name__].value for n in self.graph.nodes()], dtype=np.int32)
+        self.activations = np.array([self.graph.nodes[n]['activation'].value for n in sorted_nodes], dtype=np.int32)
         self.bias = np.array([self.graph.nodes()[n]['bias'] for n in self.graph.nodes()], dtype=np.int32)
 
         self.fitness = 0.0
@@ -237,19 +239,24 @@ def feedForward(adj, acts, bias, mem):
 
 
         sum += bias[m_i]
-        if function == 0:
+        if function == 0: # Tanh
             mem[m_i] = math.tanh(sum)
-            # print("{} -> {}")
-        elif function == 1:
+        elif function == 1: # Sine
             mem[m_i] = math.sin(sum)
-        elif function == 2:
+        elif function == 2: # Cosine
             mem[m_i] = math.cos(sum)
-        elif function == 3:
+        elif function == 3: # Sigmoid
             mem[m_i] = 1 / (1 + math.exp(-sum))
-        elif function == 4:
-            mem[m_i] = sum if sum > 0.0 else sum * 0.01  # Leaky ReLu
-        elif function == 5:
-            mem[m_i] = sum  # Linear
+        elif function == 4: # Leaky ReLu
+            mem[m_i] = sum if sum > 0.0 else sum * 0.01
+        elif function == 5: # Linear
+            mem[m_i] = sum
+        elif function == 6: # Inverse
+            mem[m_i] = -sum
+        elif function == 7: # Absolute
+            mem[m_i] = abs(sum)
+        elif function == 8: # Step
+            mem[m_i] = 1.0 if sum > 0.0 else 0.0
 
 @cuda.jit()
 def execute_network(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_results):
@@ -307,3 +314,109 @@ def calculateLinks(X, Y, start_index, i, mem):
     mem[1] = X[x][1]
     mem[2] = Y[y][0]
     mem[3] = Y[y][1]
+
+
+class CppnCUDA(object):
+
+
+    def __init__(self):
+        self.threadsperblock = 64
+
+        X, Y = np.mgrid[0:64, 0:64]
+        xy = np.vstack((X.flatten(), Y.flatten())).T
+        xy = np.repeat(xy, 10, axis=0)
+
+        self.inputs = xy
+
+        self.kernel = cuda.jit()(execute_cppn(64))
+
+    def update(self, phenotypes):
+        s = time.time()
+        # if type(X) is not np.ndarray:
+        #     X = np.array(X)
+
+        # blockspergrid = (len(phenotypes) + (self.threadsperblock - 1)) // self.threadsperblock
+        # blockspergrid = (self.inputs + (self.threadsperblock - 1)) // self.threadsperblock * len(phenotypes)
+
+        # blockspergrid = (len(phenotypes), 64)
+        blockspergrid = (64, len(phenotypes))
+
+        num_of_outputs = len(phenotypes[0].out_nodes)
+
+
+        adj_matrices = [p.adjacency_matrix for p in phenotypes]
+        acts = [p.activations for p in phenotypes]
+        bias = [p.bias for p in phenotypes]
+
+        largest_adj_size = max([n.shape[0] for n in adj_matrices])
+        original_sizes = np.zeros(len(phenotypes), dtype=np.int32)
+        # Pad all matrices to conform with the largest network
+        for i, (adj, act, bia) in enumerate(zip(adj_matrices, acts, bias)):
+            original_sizes[i] = adj.shape[0]
+            new_size = largest_adj_size - adj.shape[0]
+
+            adj_matrices[i] = np.pad(adj, [(0, new_size), (0, new_size)], mode='constant')
+            acts[i] = np.pad(act, [(0, new_size)], mode='constant')
+            bias[i] = np.pad(bia, [(0, new_size)], mode='constant')
+
+        adj_matrices = np.array(adj_matrices, dtype=np.float32)
+        acts = np.array(acts, dtype=np.int32)
+        bias = np.array(bias, dtype=np.float32)
+
+        results = np.array([np.zeros(num_of_outputs, dtype=np.float32) for _ in adj_matrices])
+
+        cuda_adj = cuda.to_device(adj_matrices)
+        cuda_acts = cuda.to_device(acts)
+        cuda_bias = cuda.to_device(bias)
+        cuda_original_sizes = cuda.to_device(original_sizes)
+        cuda_results = cuda.to_device(results)
+
+        self.kernel[blockspergrid, self.threadsperblock](cuda_adj, cuda_acts, cuda_bias, cuda_original_sizes, cuda_results)
+
+        results = cuda_results.copy_to_host()
+
+        print("Execution time: {}".format(time.time() - s))
+
+        return results
+
+def execute_cppn(size):
+    def impl(all_adj, all_acts, all_bias, all_original_sizes, all_results):
+        # C = cuda.const.array_like(inputs)
+
+        # i, j = cuda.grid(2)
+
+        # print(i, j, "\n")
+
+        bx = cuda.blockIdx.x
+        by = cuda.blockIdx.y
+
+        tx = cuda.threadIdx.x
+
+        # # i = cuda.blockIdx.x * cuda.blockDim.x
+        # bx = cuda.blockIdx.x
+        #
+        # i = bx * cuda.blockDim.x * by * cuda.blockDim.y  + tx
+
+        if tx >= size or bx*tx >= size:
+            return
+
+        # mem = C[i*j]
+        mem = cuda.local.array((3), dtype=numba.float32)
+        mem[0] = tx
+        mem[1] = bx * tx
+
+        adj = all_adj[by]
+        acts = all_acts[by]
+        bias = all_bias[by]
+        original_size = all_original_sizes[by]
+        results = all_results[by]
+
+        feedForward(adj, acts, bias, mem)
+
+        results[0] = tx
+
+        # size_diff = results.shape[0] - original_size
+        # for j in range(results.shape[0]):
+        #     results[j] = mem[-(results.shape[0] + size_diff) + j]
+
+    return impl

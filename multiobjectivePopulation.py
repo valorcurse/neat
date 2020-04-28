@@ -20,11 +20,10 @@ from neat.genes import NeuronGene, LinkGene, MutationRates, Genome
 from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
 class MOConfiguration(PopulationConfiguration):
-    def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int, obj_ranges: List[Tuple[float, float]]):
+    def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int):
         super().__init__(population_size, n_inputs, n_outputs)
 
         self._data["behavior_dimensions"] = behavior_dimensions
-        self._data["objective_ranges"] = obj_ranges
 
 class MOUpdate(SpeciesUpdate):
     def __init__(self, fitness: np.ndarray, behaviors):
@@ -71,6 +70,8 @@ class MOPopulation(SpeciatedPopulation):
         else:
             novelties = self.novelty_search.calculate_novelty(features, fitnesses)
 
+        print(novelties)
+
         for genome, novelty in zip(self.genomes, novelties):
             genome.novelty = novelty
 
@@ -98,9 +99,6 @@ class MOPopulation(SpeciatedPopulation):
         return sorted(genomes, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))[0]
 
     def refine_behaviors(self, evaluate):
-        plt.figure(1)
-        plt.clf()
-
         phenotypes = self.create_phenotypes()
         print("Refining AURORA...")
         self.aurora.refine(phenotypes, evaluate)
@@ -128,7 +126,7 @@ class MOPopulation(SpeciatedPopulation):
         nd_genomes = sorted(self.genomes, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))
 
         space_to_fill = int(self.population_size / 10)
-        nd_genomes = nd_genomes[:space_to_fill]
+        # nd_genomes = nd_genomes[:space_to_fill]
 
         new_genomes = []
         for s in self.species:
@@ -136,7 +134,7 @@ class MOPopulation(SpeciatedPopulation):
             s.members = reproduction_members
 
             # Generate new baby genome
-            to_spawn = max(0, s.numToSpawn - len(s.members))
+            to_spawn = max(1, s.numToSpawn - len(s.members))
             debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
             for i in range(to_spawn):
                 baby: Genome = None

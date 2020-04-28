@@ -7,6 +7,7 @@ from icontract import invariant, require
 
 import math
 import random
+from random import randrange
 import numpy as np
 import networkx as nx
 from numba import jit
@@ -28,20 +29,22 @@ class SpeciationType(Enum):
     COMPATIBILITY_DISTANCE = 0
     NOVELTY = 1
 
-class FuncsEnum(Enum):
+class ActivationsEnum(Enum):
     tanh = 0
     sin = 1
     cos = 2
     sigmoid = 3
     leakyRelu = 4
     linear = 5
-    maxout = 6
+    inverse = 6
+    abs = 7
+    step = 8
 
 
 class MutationRates:
     def __init__(self) -> None:
 
-        self.newSpeciesTolerance = 5.0
+        self.newSpeciesTolerance = 6.0
 
         self.crossoverRate = 0.3
         self.chanceToAddNeuron = 0.03
@@ -62,71 +65,20 @@ class MutationRates:
 class NeuronGene:
     def __init__(self, neuronType: NeuronType, ID: int, y: float, x: float = 0.0) -> None:
         self.neuronType = neuronType
-        
+
         self.ID = ID
-        
+
         self.y = y
         self.x = x
-        
-        # self.activation = self.relu
-        # self.activation = self.leakyRelu
-        self.activation = self.tanh
-        self.bias = 0.0
 
-        # self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
-        self.activations = [self.sigmoid, self.tanh, self.sin, self.cos, self.leakyRelu, self.linear]
+        self.activation = ActivationsEnum.linear
+        self.bias = 0.0
 
     def __repr__(self):
         return "NeuronGene(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
 
     def __hash__(self):
         return hash((self.ID, self.x, self.y))
-
-
-    @staticmethod
-    @jit
-    def sigmoid(x: float) -> float:
-        return 1.0 / (1.0 + math.exp(-x))   # Sigmoid
-
-    @staticmethod
-    @jit
-    def tanh(x: float) -> float:
-        return math.tanh(x)                   # Tanh
-
-    @staticmethod
-    @jit
-    def relu(x: float) -> float:
-        return max(x, 0)             # ReLu
-
-    @staticmethod
-    @jit
-    def leakyRelu(x: float) -> float:
-        return x if x > 0.0 else x * 0.01   # Leaky ReLu
-
-    @staticmethod
-    @jit
-    def sin(x: float) -> float:
-        return math.sin(x)                    # Sin
-
-    @staticmethod
-    @jit
-    def cos(x: float) -> float:
-        return math.cos(x)                     # Cos
-
-    @staticmethod
-    @jit
-    def gaussian(x: float) -> float:
-        return math.exp((-x)**2)
-
-    @staticmethod
-    @jit
-    def linear(x: float) -> float:
-        return x
-
-    @staticmethod
-    @jit
-    def maxout(x: float) -> float:
-        return x
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and self.ID == other.ID
@@ -176,9 +128,9 @@ class Genome:
 
         if len(self.neurons) == 0:
             for _ in range(self.inputs):
-                self._addNeuron(NeuronType.INPUT).activation = NeuronGene.linear
+                self._addNeuron(NeuronType.INPUT).activation = ActivationsEnum.linear
             for _ in range(self.outputs):
-                self._addNeuron(NeuronType.OUTPUT).activation = NeuronGene.sigmoid
+                self._addNeuron(NeuronType.OUTPUT).activation = ActivationsEnum.sigmoid
         else:
             # self.neurons = fastCopy(neurons)
             self.neurons = deepcopy(neurons)
@@ -388,12 +340,14 @@ class Genome:
         return True
 
     def mutateActivation(self, mutationRates: MutationRates) -> bool:
-        if (random.random() > mutationRates.chanceToMutateActivation):
+        neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN]]
+
+        if random.random() > mutationRates.chanceToMutateActivation or len(neurons) == 0:
             return False
 
-        neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
+        # neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
         random_neuron = random.choice(neurons)
-        random_neuron.activation = random.choice(random_neuron.activations)
+        random_neuron.activation = ActivationsEnum(random.randrange(len(ActivationsEnum)))
 
         return True
 

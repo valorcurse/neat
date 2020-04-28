@@ -27,9 +27,10 @@ class Aurora:
         print("Aurora | Input dim: {} | Encoding dim: {}".format(self.inputs_dim, self.encoding_dim))
 
         lrelu = lambda x: tf.keras.layers.LeakyReLU(alpha=0.1)(x)
-        activation = lrelu
-        # activation = 'tanh'
+        # activation = lrelu
+        activation = 'tanh'
         encoding_activation = 'tanh'
+        decoding_activation = 'linear'
         # activation = 'sigmoid'
 
         # this is our input placeholder
@@ -49,7 +50,7 @@ class Aurora:
         layer7 = Dense(int(inputs_dim/4), activation=activation)(layer6)
         layer8 = Dense(int(inputs_dim/2), activation=activation)(layer7)
         # "decoded" is the lossy reconstruction of the input
-        decoded = Dense(self.inputs_dim, activation=activation)(layer8)
+        decoded = Dense(self.inputs_dim, activation=decoding_activation)(layer8)
 
         # "encoded" is the encoded representation of the input
         # encoded = Dense(self.encoding_dim, activation=activation)(input_img)
@@ -85,21 +86,6 @@ class Aurora:
             last_loss = loss
 
             _, states = evaluate(phenotypes)
-
-            # m = np.mean(states, axis=0)
-            # std = np.std(states, axis=0)
-            # std[std == 0] = 1
-            #
-            # data = 0.5 * (np.tanh(0.01 * ((states - m) / std)) + 1)
-
-            # print("mean {}".format(m))
-            # print("std {}".format(std))
-
-            # print("states")
-            # print(states)
-
-            # print("data")
-            # print(data)
 
             test_percent = max(1, int(states.shape[0] * 0.2))
 

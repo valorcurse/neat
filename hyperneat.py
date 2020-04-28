@@ -15,12 +15,12 @@ from itertools import groupby
 
 class HyperNEAT(NEAT):
 
-    def __init__(self, population_configuration: PopulationConfiguration, mutation_rates: MutationRates=MutationRates()):
+    def __init__(self, eval_env, population_configuration: PopulationConfiguration, mutation_rates: MutationRates=MutationRates()):
         
         # CPPNs take 4 inputs, gotta move this somewhere else
         nrOfLayers: int = 3
         self.layers = np.linspace(-1.0, 1.0, num=nrOfLayers)
-        cppnInputs: int = 4
+        cppnInputs: int = 2
         # cppnOutputs: int = nrOfLayers - 1
         cppnOutputs = 1
 
@@ -51,7 +51,7 @@ class HyperNEAT(NEAT):
 
         population_configuration._data["n_inputs"] = cppnInputs
         population_configuration._data["n_outputs"] = cppnOutputs
-        self.neat = NEAT(population_configuration, mutation_rates)
+        self.neat = NEAT(eval_env, population_configuration, mutation_rates)
 
     def epoch(self, update_data: PopulationUpdate) -> List[Phenotype]:
         self.neat.population.updatePopulation(update_data)
@@ -69,7 +69,24 @@ class HyperNEAT(NEAT):
 
         return substrates
 
-    # def update(self, X):
+    def create_phenotypes(self):
+        return [self.createSubstrate(g) for g in self.neat.population.genomes]
+
+    def epoch(self):
+
+        for _ in self.neat.epoch():
+
+            cppns = self.neat.population.genomes
+
+            substrates = []
+            for i, c in enumerate(cppns):
+                # print("epoch:", i)
+                substrates.append(self.createSubstrate(c))
+
+                print("\rCreated substrates: %d/%d" % (i, len(cppns)), end='')
+
+            yield
+
 
 
     def createSubstrate(self, cppn: Genome) -> Phenotype:

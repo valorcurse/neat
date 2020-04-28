@@ -7,10 +7,11 @@ from neat.utils import chunks
 from neat.phenotypes import Phenotype
 from neat.genes import MutationRates, Phase, SpeciationType
 
-from neat.mapElites import MapElites, MapElitesConfiguration, MapElitesUpdate
-from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
-from neat.multiobjectivePopulation import MOConfiguration, MOPopulation, MOUpdate
 from neat.population import PopulationConfiguration, Population
+from neat.weightagnosticPopulation import WeightAgnosticConfiguration, WeightAgnosticPopulation
+from neat.mapElites import MapElites, MapElitesConfiguration, MapElitesUpdate
+from neat.multiobjectivePopulation import MOConfiguration, MOPopulation, MOUpdate
+from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
 class NEAT:
 
@@ -29,6 +30,7 @@ class NEAT:
 
         self.epochs = -1
         self.refinement_epochs = [0, 50, 100, 350, 750, 1550]
+        # self.refinement_epochs = [50, 100, 350, 750, 1550]
         # self.refinement_epochs = [0, 10, 25, 50, 100, 150, 350, 750, 1550]
 
         # If using MapElites
@@ -39,9 +41,13 @@ class NEAT:
         elif isinstance(self.population_configuration, SpeciesConfiguration):
             self.population = SpeciatedPopulation(population_configuration, self.innovations, mutation_rates)
 
-        # If using regular speciated population
+        # If using multi-objective speciated population
         elif isinstance(self.population_configuration, MOConfiguration):
             self.population = MOPopulation(population_configuration, self.innovations, mutation_rates)
+
+        # If using weight-agnostic speciated population
+        elif isinstance(self.population_configuration, WeightAgnosticConfiguration):
+            self.population = WeightAgnosticPopulation(population_configuration, self.innovations, mutation_rates)
 
         # Passed function that runs the evaluation environment
         self.eval_env = eval_env
@@ -69,6 +75,8 @@ class NEAT:
 
         return (np.array(all_fitnesses), np.array(all_features))
 
+    def create_phenotypes(self):
+        return self.population.create_phenotypes()
 
     def epoch(self):
 
@@ -80,13 +88,17 @@ class NEAT:
 
             self.population.reproduce()
 
-            self.phenotypes = self.population.create_phenotypes()
+            self.phenotypes = self.create_phenotypes()
+
             fitnesses, states = self.evaluate_vectorized(self.phenotypes)
 
             if isinstance(self.population_configuration, MapElitesConfiguration):
                 self.population.updatePopulation(MapElitesUpdate(fitnesses, states))
 
             elif isinstance(self.population_configuration, SpeciesConfiguration):
+                self.population.updatePopulation(SpeciesUpdate(fitnesses))
+
+            elif isinstance(self.population_configuration, WeightAgnosticConfiguration):
                 self.population.updatePopulation(SpeciesUpdate(fitnesses))
 
             elif isinstance(self.population_configuration, MOConfiguration):
