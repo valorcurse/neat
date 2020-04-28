@@ -10,7 +10,7 @@ import math
 from copy import copy, deepcopy
 
 # import neat.genes as genes
-from neat.utils import debug_print
+from neat.utils import debug_print, fastCopy
 from neat.aurora import Aurora
 from neat.innovations import Innovations
 from neat.population import PopulationUpdate
@@ -26,10 +26,12 @@ class MOConfiguration(PopulationConfiguration):
         self._data["behavior_dimensions"] = behavior_dimensions
 
 class MOUpdate(SpeciesUpdate):
-    def __init__(self, fitness: np.ndarray, features):
+    def __init__(self, fitness: np.ndarray, features: np.ndarray):
         super().__init__(fitness)
 
         self._data["features"] = features
+
+
 
 class MOPopulation(SpeciatedPopulation):
 
@@ -60,7 +62,7 @@ class MOPopulation(SpeciatedPopulation):
 
         # features = self.aurora.characterize(update.behaviors)
 
-        super().updatePopulation(update)
+        # super().updatePopulation(update)
 
         # fitnesses = np.array([g.fitness for g in self.genomes])
 
@@ -74,33 +76,36 @@ class MOPopulation(SpeciatedPopulation):
         #     genome.novelty = novelty
 
         # Fitness and novelty are made negative, because the non dominated sorting
-        # is a minimalization algorithm
-        # points = list(zip(-fitnesses, -novelties))
+        # is a minimization algorithm
+        inverted_objectives = -update.objectives
 
-        inverse_fitness = -update.fitness
-        inverse_features = [-f for f in update.features]
-
-        if len(inverse_features) == 0:
+        # Non-dominated sorting requires at least 2 dimensions
+        if inverted_objectives.ndim < 2:
             # Padding zeroes
-            z = np.zeros((len(inverse_fitness)))
-            points = list(zip(*[inverse_fitness, z]))
-        else:
-            combined = inverse_fitness + inverse_features
-            points = list(zip(*combined))
+            # z = np.zeros((len(inverted_objectives)))
+            # points = list(zip(*[inverted_objectives, z]))
 
-        points = np.array(points)
+            # inverted_objectives = np.pad(inverted_objectives, [(0, 1)], mode='constant')
+            inverted_objectives = np.array(list(zip(inverted_objectives, np.zeros(inverted_objectives.shape))))
+        # else:
+        #     combined = inverted_objectives
+        #     points = list(zip(*combined))
 
-        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=points)
+        # points = np.array(inverted_objectives)
+
+        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=inverted_objectives)
 
         for i in range(len(ndf)):
             front_genomes = [self.genomes[j] for j in ndf[i]]
-            front_points = [points[j] for j in ndf[i]]
+            front_points = [inverted_objectives[j] for j in ndf[i]]
             front_ranks = [ndr[j] for j in ndf[i]]
 
             crowding_distances = pg.crowding_distance(front_points) if len(front_points) > 1 else np.zeros((len(front_points)))
             for g, d, r in zip(front_genomes, crowding_distances, front_ranks):
                 g.data['crowding_distance'] = d
-                g.data['rank'] = r
+                g.data['rank'] = r + 1
+
+
 
         # super().updatePopulation(update)
 
@@ -147,10 +152,11 @@ class MOPopulation(SpeciatedPopulation):
 
                 if random.random() > self.mutationRates.crossoverRate:
                     member = random.choice(reproduction_members)
-                    baby = deepcopy(member)
+                    baby = fastCopy(member)
+                    # baby = deepcopy(member)
                     baby.mutate(self.mutationRates)
-                else:
 
+                else:
                     # Tournament selection
                     randomMembers = lambda: [random.choice(reproduction_members) for _ in range(2)]
                     g1 = self.tournament_selection(randomMembers())
@@ -169,7 +175,6 @@ class MOPopulation(SpeciatedPopulation):
 
     def reproduce(self) -> None:
         self.generation += 1
-
 
         for s in self.species:
             nd_genomes = sorted(s.members, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))

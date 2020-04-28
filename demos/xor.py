@@ -7,7 +7,8 @@ from neat.main.speciatedFitnessNeat import SpeciatedFitnessNeat
 from neat.neatTypes import NeuronType
 from neat.evaluation import FitnessEvaluation
 from neat.phenotypes import Phenotype, ParallelCUDA
-from neat.multiobjectivePopulation import MOConfiguration
+# from neat.multiobjectivePopulation import MOConfiguration
+from neat.speciatedPopulation import SpeciesConfiguration
 
 
 if __name__ == '__main__':
@@ -15,6 +16,7 @@ if __name__ == '__main__':
     inputs = 2
     outputs = 1
 
+    np.seterr(all='raise')
 
     class TestOrganism(FitnessEvaluation):
 
@@ -24,22 +26,39 @@ if __name__ == '__main__':
 
             self.feedforward = ParallelCUDA(self.xor_inputs)
 
+            self.old_best = -1000.0
+            self.old_pheno = None
 
-        def run_environment(self, phenotypes: List[Phenotype]) -> List[np.array]:
+
+        def run_environment(self, phenotypes: List[Phenotype]) -> np.ndarray:
             output = self.feedforward.update(phenotypes)
 
             fitnesses = np.full(len(phenotypes), 4.0)
-            error = np.sum((output.reshape(-1, output.shape[1]) - self.xor_outputs) ** 2, axis=1)
+            # error = np.sum((output.reshape(-1, output.shape[1]) - self.xor_outputs) ** 2, axis=1)
+            error = np.sum(np.abs((output.reshape(-1, output.shape[1]) - self.xor_outputs)), axis=1)
             fitnesses -= error
 
-            return [np.array(fitnesses[:len(phenotypes)])]
+            best_pheno = phenotypes[np.argmax(fitnesses)]
+            best_fitness = np.max(fitnesses)
+
+
+            # if self.old_best != None:
+            print(self.old_best, best_fitness)
+
+            if best_fitness < self.old_best:
+                print("heh.")
+
+            self.old_best = best_fitness
+            self.old_pheno = best_pheno
+
+            return np.array(fitnesses[:len(phenotypes)])
 
         def evaluate(self, phenotypes: List[Phenotype]) -> List[np.array]:
             return self.evaluate_one_to_all(phenotypes)
 
 
 
-    pop_config = MOConfiguration(pop_size, inputs, outputs)
+    pop_config = SpeciesConfiguration(pop_size, inputs, outputs)
     neat = SpeciatedFitnessNeat(TestOrganism(), pop_config)
 
     highest_fitness = -1000.0
@@ -58,6 +77,7 @@ if __name__ == '__main__':
             ["ID", "age", "members", "max fitness", "avg. distance", "stag", "neurons", "links", "avg. weight",
              "max. compat.", "to spawn"])
         for s in neat.population.species:
+            weights = [l.weight for m in s.members for l in m.links]
             table.add_row([
                 # Species ID
                 s.ID,
@@ -81,7 +101,7 @@ if __name__ == '__main__':
                 # "{:1.2f}".format(np.mean([len(p.graph.edges) for p in neat.phenotypes])),
                 "{:1.2f}".format(np.mean([len(m.createPhenotype().graph.edges) for m in s.members])),
                 # Avg. weight
-                "{:1.2f}".format(np.mean([l.weight for m in s.members for l in m.links])),
+                "{:1.2f}".format(np.mean(weights) if len(weights) > 0 else 0.0),
                 # Max. compatiblity
                 "{:1.2}".format(np.max([m.calculateCompatibilityDistance(s.leader) for m in s.members])),
                 # Nr. of members to spawn

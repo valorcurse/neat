@@ -59,6 +59,7 @@ class Species:
 
     def adjustFitnesses(self) -> None:
         for m in self.members:
+            # m.adjustedFitness = m.data["rank"] / len(self.members)
             m.adjustedFitness = m.fitness / len(self.members)
 
 
@@ -109,8 +110,8 @@ class SpeciatedPopulation(Population):
         self.species.append(firstSpecies)
         
         for i in range(self.population_size - 1):
-            # newGenome = fastCopy(baseGenome)
-            newGenome = deepcopy(baseGenome)
+            newGenome = fastCopy(baseGenome)
+            # newGenome = deepcopy(baseGenome)
             newGenome.ID = self.currentGenomeID
             firstSpecies.addMember(newGenome)
             self.genomes.append(newGenome)
@@ -136,7 +137,7 @@ class SpeciatedPopulation(Population):
         # improved_genomes = [(f, g) for f, g in zip(update.fitness, self.genomes) if f > g.fitness]
         # for fitness, genome in improved_genomes:
         #     genome.fitness = fitness
-
+        # print(self.genomes)
         # Set fitness score to their respective genome
         for index, genome in enumerate(self.genomes):
             genome.fitness = update.fitness[index]
@@ -148,15 +149,16 @@ class SpeciatedPopulation(Population):
         best_species = None
         best_fitness = -1000.0
         for s in self.species:
-            max_fitness = np.max([m.fitness for m in s.members])
+            # max_rank = np.max([m.data["rank"] for m in s.members])
 
-            best_leaders.append(max_fitness)
+            max_fitness = np.max([m.fitness for m in s.members])
+            # best_leaders.append(max_rank)
 
             if max_fitness > best_fitness:
                 best_fitness = max_fitness
                 best_species = s
 
-        best_leaders = set(best_leaders)
+        # best_leaders = set(best_leaders)
 
         # Age species and remove stagnant species
         for s in self.species:
@@ -254,33 +256,36 @@ class SpeciatedPopulation(Population):
 
     def newGeneration(self) -> List[Genome]:
 
-
-        new_genomes = []
         for s in self.species:
-            newPop = []
+            new_genomes = []
 
             s.members.sort(reverse=True, key=lambda x: x.fitness)
+
             # Grabbing the top 2 performing genomes
             for topMember in s.members[:s.num_of_elites]:
-                newPop.append(topMember)
+                new_genomes.append(topMember)
 
-            # Only use the survival threshold fraction to use as parents for the next generation.
-            # Use at least two parents no matter what the threshold fraction result is.
-            cutoff = max(int(math.ceil(0.2 * len(s.members))), 2)
-            reproduction_members = copy(s.members[:cutoff])
+            # cutoff = max(2, int(len(s.members)*0.2))
+            # reproduction_members = s.members[:cutoff]
 
+            reproduction_members = s.members
+
+            # s.members = []
+            # max_1 = max([m.fitness for m in reproduction_members])
             # Generate new baby genome
-            to_spawn = max(0, s.numToSpawn - len(newPop))
+            to_spawn = max(0, s.numToSpawn - len(new_genomes))
             # debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
+
             for i in range(to_spawn):
-                baby: genes.Genome = None
+                baby: Genome = None
 
                 if random.random() > self.mutationRates.crossoverRate:
                     member = random.choice(reproduction_members)
-                    baby = deepcopy(member)
+                    # baby = deepcopy(member)
+                    baby = fastCopy(member)
                     baby.mutate(self.mutationRates)
-
                 else:
+
                     # Tournament selection
                     randomMembers = lambda: [random.choice(reproduction_members) for _ in range(2)]
                     g1 = self.tournament_selection(randomMembers())
@@ -291,13 +296,15 @@ class SpeciatedPopulation(Population):
                 self.currentGenomeID += 1
                 baby.ID = self.currentGenomeID
 
-                newPop.append(baby)
+                new_genomes.append(baby)
+                # s.addMember(baby)
 
+            s.members = []
+            for g in new_genomes:
+                s.addMember(g)
 
-            s.members = newPop
-            new_genomes += s.members
+        return [g for s in self.species for g in s.members]
 
-        return new_genomes
 
     def reproduce(self) -> None:
         self.generation += 1

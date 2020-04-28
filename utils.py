@@ -1,4 +1,7 @@
-import pickle
+# import pickle
+# from msgpack import packb, unpackb
+# import json
+from copy import deepcopy
 import os
 from inspect import currentframe, getframeinfo, stack
 
@@ -9,7 +12,10 @@ def find(f, seq):
             return item
 
 def fastCopy(object):
-    return pickle.loads(pickle.dumps(object, -1))
+    # return json.loads(json.dumps(object))
+    # return pickle.loads(pickle.dumps(object, -1))
+    # return unpackb(packb(object))
+    return deepcopy(object)
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""

@@ -10,7 +10,7 @@ import random
 import numpy as np
 import networkx as nx
 from numba import jit
-from copy import deepcopy
+from copy import deepcopy, copy
 
 import neat.phenotypes
 from neat.neatTypes import NeuronType
@@ -50,12 +50,12 @@ class MutationRates:
         self.mutationRate = 0.9
         self.chanceToMutateWeight = 0.8
         self.chanceToMutateBias = 0.7
-        self.chanceToMutateActivation = 0.0
+        self.chanceToMutateActivation = 0.03
 
         self.chanceToDeleteLink = 0.0
 
         self.probabilityOfWeightReplaced = 0.1
-        self.maxWeightPerturbation = 1.5
+        self.maxWeightPerturbation = 0.5
 
         self.mpcMargin = 20
 
@@ -165,27 +165,29 @@ class Genome:
         self.innovations: Innovations = innovations
         self.parents = parents
 
-        # self.links = fastCopy(links)
-        self.links = deepcopy(links)
+        self.links = fastCopy(links)
+        # self.links = deepcopy(links)
 
 
         self.inputs = inputs
         self.outputs = outputs
-        # self.neurons: List[NeuronGene] = fastCopy(neurons)
-        self.neurons: List[NeuronGene] = deepcopy(neurons)
+        self.neurons: List[NeuronGene] = fastCopy(neurons)
+        # self.neurons: List[NeuronGene] = deepcopy(neurons)
 
         if len(self.neurons) == 0:
             for _ in range(self.inputs):
                 self._addNeuron(NeuronType.INPUT).activation = NeuronGene.linear
             for _ in range(self.outputs):
                 self._addNeuron(NeuronType.OUTPUT).activation = NeuronGene.sigmoid
-        else:
-            # self.neurons = fastCopy(neurons)
-            self.neurons = deepcopy(neurons)
+        # else:
+        #     self.neurons = fastCopy(neurons)
+            # self.neurons = deepcopy(neurons)
 
         self.data = {}
 
         self.fitness: float = -1000.0
+        # self.objectives = []
+
         self.adjustedFitness: float = -1000.0
         self.novelty: float = -1000.0
         
@@ -195,18 +197,37 @@ class Genome:
         self.species: Optional[Species] = None
 
         # Check whether a link is pointing to a non existing node
-        neuron_ids = set([n.ID for n in self.neurons])
-        links_ids = set([l.fromNeuron.ID for l in self.links] + [l.toNeuron.ID for l in self.links])
-        assert len(links_ids - neuron_ids) == 0, \
-            "Found an edge with {} neuron(s) that do not exist: {}".format(len(links_ids - neuron_ids), links_ids - neuron_ids)
+        # neuron_ids = set([n.ID for n in self.neurons])
+        # links_ids = set([l.fromNeuron.ID for l in self.links] + [l.toNeuron.ID for l in self.links])
+        # assert len(links_ids - neuron_ids) == 0, \
+        #     "Found an edge with {} neuron(s) that do not exist: {}".format(len(links_ids - neuron_ids), links_ids - neuron_ids)
 
     def __lt__(self, other: Genome) -> bool:
         return self.fitness < other.fitness
 
-    def __deepcopy__(self, memodict={}):
-        copy_object = Genome(self.ID, self.inputs, self.outputs, self.innovations, self.neurons, self.links, self.parents)
-        copy_object.data = deepcopy(self.data)
-        return copy_object
+    def __deepcopy__(self, memo):
+
+        # copy_object = Genome(self.ID, self.inputs, self.outputs, self.innovations, self.neurons, self.links, self.parents)
+        # copy_object.data = deepcopy(self.data)
+        # return copy_object
+        cls = self.__class__  # Extract the class of the object
+        result = cls.__new__(cls)  # Create a new instance of the object based on extracted class
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, v)
+
+        setattr(result, "links", deepcopy(self.links, memo))
+        setattr(result, "neurons", deepcopy(self.neurons, memo))
+
+        # setattr(result, "inputs", self.inputs)
+        # setattr(result, "outputs", self.outputs)
+        # setattr(result, "innovations", self.innovations)
+        # setattr(result, "fitness", self.fitness)
+        # setattr(result, "species", self.fitness)
+        # setattr(result, "distance", self.fitness)
+        # for k, v in self.__dict__.items():
+        #     setattr(result, k, deepcopy(v, memo))
+        return result
 
     def __repr__(self):
         return "Genome(ID={}, neurons={}, links={})".format(self.ID, self.neurons, self.links)
@@ -373,7 +394,12 @@ class Genome:
         random_link = random.choice(self.links)
         if random.random() > mutationRates.probabilityOfWeightReplaced:
             random_link.weight += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
+            # mutation = np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
+            # random_link.weight = np.clip(random_link.weight + mutation, -5.0, 5.0)
+
+
         else:
+            # random_link.weight = np.clip(np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0], -5.0, 5.0)
             random_link.weight = np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
 
         return True
@@ -409,8 +435,9 @@ class Genome:
 
         mutation_successful = False
         while len(mutation_functions) > 0 and not mutation_successful:
-            # random_mutation = mutation_functions[random.randint(0, len(mutation_functions) - 1)]
-            random_mutation = random.choice(mutation_functions)
+            r= random.randint(0, len(mutation_functions) - 1)
+            random_mutation = mutation_functions[r]
+            # random_mutation = random.choice(mutation_functions)
             # print(random_mutation)
             mutation_successful = random_mutation()
 
@@ -427,8 +454,8 @@ class Genome:
         pheno_graph = nx.DiGraph()
         genome_graph = nx.DiGraph()
 
-        # neurons = fastCopy(self.neurons)
-        neurons = deepcopy(self.neurons)
+        neurons = fastCopy(self.neurons)
+        # neurons = deepcopy(self.neurons)
 
         for neuron in self.neurons:
             # Add all nodes to the genome graph

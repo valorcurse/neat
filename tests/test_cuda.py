@@ -120,11 +120,18 @@ def test_single_edges():
 
     feedforward = ParallelCUDA(inputs)
 
-    result = feedforward.update([phenotype])[0][0]
+    result = feedforward.update([phenotype])
+    result = result[0][0]
 
     answers = [NeuronGene.sigmoid(inputs[0][0]*0.4), NeuronGene.sigmoid(inputs[0][1]*0.1)]
 
     np.testing.assert_array_almost_equal(result, answers)
+
+    repeat_results = []
+    for _ in range(100):
+        repeat_results.append(feedforward.update([phenotype])[0][0])
+
+    assert np.count_nonzero(np.equal(result, repeat_results))/2 == len(repeat_results)
 
 
 def test_multiple_edges():

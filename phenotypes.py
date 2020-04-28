@@ -14,7 +14,7 @@ import sys
 
 import neat.genes
 from neat.neatTypes import NeuronType
-from neat.utils import chunks
+from neat.utils import chunks, debug_print
 
 from copy import deepcopy
 
@@ -105,19 +105,14 @@ class Phenotype:
             for s in self.in_nodes:
                 path_lengths = [len(x) for x in list(nx.all_simple_paths(self.graph, s[0], n))]
                 max_length = 0 if len(path_lengths) == 0 else max(path_lengths) - 1
-                # max_length = max(path_lengths) - 1 if max(path_lengths) > 0 else 0
                 longest_paths.append(max_length)
 
             longest_path = max(longest_paths)
             layers[longest_path].append(n)
 
-        # print(layers)
-
-
         width = max(len(l) for l in layers)
         id_layers = np.full((height, width), -1)
 
-        # sorted_nodes = list(nx.topological_sort(self.graph))
         for i in range(len(id_layers)):
             layer = layers[i]
             sorted_indexes = [nodes.index(n) for n in layer]
@@ -131,7 +126,7 @@ class Phenotype:
         pass
 
 '''
-Executes neuralnetworks on the GPU for environments that
+Executes neural networks on the GPU for environments that
 need to be executed sequentially
 '''
 class SequentialCUDA(object):
@@ -210,33 +205,17 @@ class ParallelCUDA(object):
         self.max_global_data = 0x10000
 
         self.X = X.astype(np.float32)
-
-        # print("Data size: {}".format(sys.getsizeof(X)))
-
         self.kernel = cuda.jit()(self.create_kernel(self.X))
-
-        # chunk_size = self.max_global_data / (X.shape[1] * X.itemsize)
-        # chunk_size = int(chunk_size / 100.0) * 100
-        # chunk_size = int(chunk_size / 10)
-
-        # self.kernels = []
-        # for x in chunks(X, chunk_size):
-        #     data = x.astype(np.float32)
-        #     kernel = cuda.jit()(self.create_kernel(data))
-        #     # self.kernels.append() = [cuda.jit()(self.create_kernel(x)) for x in chunks(X, chunk_size)]
-        #     kernel.chunk_size = x.shape[0]
-        #     self.kernels.append(kernel)
-
 
     def create_kernel(self, data):
         print("Created kernel: {}".format(data.size))
-        def impl(all_mem, all_adj, all_acts, all_bias, all_original_sizes, all_layers, all_results):
+        def impl(all_mem, all_adj, all_acts, all_bias, all_layers, all_results):
 
             # p is the phenotype
             p = cuda.blockIdx.x
 
             # i is the thread
-            i = cuda.threadIdx.x
+            # i = cuda.threadIdx.x
 
             # Training data
             X = cuda.const.array_like(data)
@@ -247,25 +226,31 @@ class ParallelCUDA(object):
             acts = all_acts[p]
             bias = all_bias[p]
             layers = all_layers[p]
-            original_size = all_original_sizes[p]
             results = all_results[p]
-
-            size_diff = mem.shape[0] - original_size
 
             # Loop through all training vectors
             for x_i in range(X.shape[0]):
                 x = X[x_i]
 
-                for k in range(x.shape[0]):
-                    mem[k] = x[k]
+                padding = 0
+                for k in range(mem.shape[0]):
+                    if math.isnan(mem[k]):
+                        padding += 1
+                        continue
+
+                    if k < x.shape[0]:
+                        mem[k] = x[k]
+                    else:
+                        mem[k] = 0
 
                 feedForward_parallel(adj, acts, bias, mem, layers)
 
-                for k in range(results.shape[1]):
-                    results[x_i][k] = mem[-(results.shape[0] + size_diff) + k - 1]
+                for k in range(results[x_i].shape[0]):
+                    l = abs(mem.shape[0] - padding - results[x_i].shape[0])
 
+                    results[x_i][k] = mem[l + k]
 
-            some_var = 0
+                some_var = 0.0
 
         return impl
 
@@ -288,16 +273,23 @@ class ParallelCUDA(object):
         bias = [p.bias for p in phenotypes]
         layers = [p.layers for p in phenotypes]
 
+        # mem = np.zeros((len(phenotypes), largest_adj_size), dtype=np.float32)
+        mems = [np.zeros(p.adjacency_matrix.shape[0], dtype=np.float32) for p in phenotypes]
+
+        # results = np.zeros((len(phenotypes), self.X.shape[0], num_of_outputs), dtype=np.float32)
+
         largest_adj_size = max([n.shape[0] for n in adj_matrices])
-        original_sizes = np.zeros(len(phenotypes), dtype=np.int32)
+
         # Pad all matrices to conform with the largest network
-        for i, (adj, act, bia, layer) in enumerate(zip(adj_matrices, acts, bias, layers)):
-            original_sizes[i] = adj.shape[0]
+        for i, (adj, act, bia, layer, mem) in enumerate(zip(adj_matrices, acts, bias, layers, mems)):
             padding = largest_adj_size - adj.shape[0]
 
             adj_matrices[i] = np.pad(adj, [(0, padding), (0, padding)], mode='constant')
             acts[i] = np.pad(act, [(0, padding)], mode='constant')
             bias[i] = np.pad(bia, [(0, padding)], mode='constant')
+
+            mems[i] = np.pad(mem, [(0, padding)], mode='constant', constant_values=np.nan)
+            # results[i] = np.pad(result, [(0, padding)], mode='constant', constant_values=np.nan)
 
         widest_layer = max([len(l) for n in layers for l in n])
         highest_layer = max([len(n) for n in layers])
@@ -312,37 +304,31 @@ class ParallelCUDA(object):
         acts = np.array(acts, dtype=np.int32)
         bias = np.array(bias, dtype=np.float32)
         layers = np.array(layers, dtype=np.int32)
+        mems = np.array(mems, dtype=np.float32)
+        # results = np.array(results, dtype=np.float32)
 
         cuda_adj = cuda.to_device(adj_matrices)
         cuda_acts = cuda.to_device(acts)
         cuda_bias = cuda.to_device(bias)
         cuda_layers = cuda.to_device(layers)
-        cuda_original_sizes = cuda.to_device(original_sizes)
 
-        cuda_data = cuda.to_device(self.X)
-
-        mem = np.zeros((len(phenotypes), largest_adj_size), dtype=np.float32)
-        cuda_mem = cuda.to_device(mem)
+        # mem = np.zeros((len(phenotypes), largest_adj_size), dtype=np.float32)
+        cuda_mem = cuda.to_device(mems)
 
         results = np.zeros((len(phenotypes), self.X.shape[0], num_of_outputs), dtype=np.float32)
+        # results = np.zeros((len(phenotypes), self.X.shape[0], largest_adj_size), dtype=np.float32)
+        # results = np.full((len(phenotypes), self.X.shape[0], num_of_outputs), dtype=np.float32)
+        # results = np.pad(results, (0, ))
+
         cuda_results = cuda.to_device(results)
-
-        # Max 48 kb?
-        all_data = cuda_mem.nbytes + cuda_adj.nbytes + cuda_acts.nbytes + cuda_bias.nbytes + cuda_original_sizes.nbytes + cuda_results.nbytes + cuda_data.nbytes
-        print("Data size: {}".format(sys.getsizeof(all_data)))
-
 
         blocks = len(phenotypes)
         threads = widest_layer
-
-        self.kernel[blocks, threads](cuda_mem, cuda_adj,
-                                          cuda_acts, cuda_bias, cuda_original_sizes,
-                                          cuda_layers, cuda_results)
-
-
+        self.kernel[blocks, threads](cuda_mem, cuda_adj, cuda_acts, cuda_bias, cuda_layers, cuda_results)
 
         results = cuda_results.copy_to_host()
-        mem = cuda_mem.copy_to_host()
+        # mem = cuda_mem.copy_to_host()
+        # debug_print(mem)
 
         return results
 
@@ -404,7 +390,8 @@ def feedForward_parallel(adj, acts, bias, mem, layers):
 
         node = layers[l][i]
 
-        if l == 0 or node == -1:
+        # if l == 0 or node == -1:
+        if node == -1:
             continue
 
         weights = adj.T[node]
@@ -413,14 +400,16 @@ def feedForward_parallel(adj, acts, bias, mem, layers):
         sum = bias[node]
         for j in range(weights.size):
             w = weights[j]
-            # x = X[j] if l == 0 else mem[j]
             x = mem[j]
+
+            if math.isnan(x):
+                continue
 
             sum += w * x
 
         sum = activate(sum, acts[node])
 
-        mem[node] = sum
+        mem[node] += sum
 
 
 @cuda.jit(device=True)

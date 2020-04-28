@@ -133,3 +133,23 @@ def test_speciation(population):
     assert len(population.species) == 2
     assert len(new_species.members) == 1
     assert new_species.leader == g2
+
+
+def test_elitism(population):
+    population.genomes = []
+
+    g1 = population.newGenome()
+    g1.fitness = 100
+
+    g2 = population.newGenome()
+    g2.fitness = 90
+
+    g3 = population.newGenome()
+    g3.fitness = 80
+
+    assert len(population.genomes) == 3
+
+    population.reproduce()
+
+    assert g1 in population.genomes
+    assert g2 in population.genomes
