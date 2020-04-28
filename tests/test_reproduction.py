@@ -1,8 +1,8 @@
 import pytest
 from neat.neatTypes import NeuronType
-from neat.genes import Genome, MutationRates, NeuronGene, LinkGene
+from neat.genes import MutationRates, NeuronGene, LinkGene
 from neat.innovations import Innovations
-from neat.population import Population, PopulationConfiguration
+from neat.populations.population import Population, PopulationConfiguration
 
 pop_size = 5
 inputs = 2

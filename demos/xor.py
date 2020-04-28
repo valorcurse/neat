@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import List
 
 import numpy as np
 from prettytable import PrettyTable
@@ -8,7 +8,7 @@ from neat.neatTypes import NeuronType
 from neat.evaluation import FitnessEvaluation
 from neat.phenotypes import Phenotype, ParallelCUDA
 # from neat.multiobjectivePopulation import MOConfiguration
-from neat.speciatedPopulation import SpeciesConfiguration
+from neat.populations.speciatedPopulation import SpeciesConfiguration
 
 
 if __name__ == '__main__':

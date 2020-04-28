@@ -4,7 +4,7 @@ from neat.genes import MutationRates
 from neat.aurora import Aurora
 from neat.noveltySearch import NoveltySearch
 from neat.evaluation import FitnessEvaluation
-from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
+from neat.populations.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
 import numpy as np
 

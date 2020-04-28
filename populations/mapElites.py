@@ -2,12 +2,11 @@ from typing import List, Optional
 
 from neat.innovations import Innovations
 from neat.genes import Genome, NeuronGene, LinkGene, MutationRates
-from neat.population import Population, PopulationConfiguration, PopulationUpdate
+from neat.populations.population import Population, PopulationConfiguration, PopulationUpdate
 
 
 import random
 import numpy as np
-from scipy import spatial
 from icontract import require
 
 

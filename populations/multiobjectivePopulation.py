@@ -1,26 +1,22 @@
-from typing import List, Tuple
+from typing import List
 from icontract import require
 
 import numpy as np
 import pygmo as pg
-import matplotlib.pyplot as plt
 import random
-import math
 
-from copy import copy, deepcopy
+from copy import copy
 
 # import neat.genes as genes
 from neat.utils import debug_print, fastCopy
-from neat.aurora import Aurora
 from neat.innovations import Innovations
-from neat.population import PopulationUpdate
-from neat.noveltySearch import NoveltySearch
-from neat.population import PopulationConfiguration
+from neat.populations.population import PopulationUpdate
+from neat.populations.population import PopulationConfiguration
 from neat.genes import NeuronGene, LinkGene, MutationRates, Genome
-from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
+from neat.populations.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 
 class MOConfiguration(PopulationConfiguration):
-    def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int = 0):
+    def __init__(self, population_size: int, n_inputs: int, n_outputs: int, behavior_dimensions: int):
         super().__init__(population_size, n_inputs, n_outputs)
 
         self._data["behavior_dimensions"] = behavior_dimensions
@@ -57,8 +53,8 @@ class MOPopulation(SpeciatedPopulation):
 
         return genome
 
-    @require(lambda update: isinstance(update, MOUpdate))
-    def updatePopulation(self, update: PopulationUpdate) -> None:
+    # @require(lambda update: isinstance(update, MOUpdate))
+    def updatePopulation(self, objectives: np.array) -> None:
 
         # features = self.aurora.characterize(update.behaviors)
 
@@ -77,21 +73,11 @@ class MOPopulation(SpeciatedPopulation):
 
         # Fitness and novelty are made negative, because the non dominated sorting
         # is a minimization algorithm
-        inverted_objectives = -update.objectives
+        inverted_objectives = -objectives
 
         # Non-dominated sorting requires at least 2 dimensions
         if inverted_objectives.ndim < 2:
-            # Padding zeroes
-            # z = np.zeros((len(inverted_objectives)))
-            # points = list(zip(*[inverted_objectives, z]))
-
-            # inverted_objectives = np.pad(inverted_objectives, [(0, 1)], mode='constant')
             inverted_objectives = np.array(list(zip(inverted_objectives, np.zeros(inverted_objectives.shape))))
-        # else:
-        #     combined = inverted_objectives
-        #     points = list(zip(*combined))
-
-        # points = np.array(inverted_objectives)
 
         ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(points=inverted_objectives)
 
@@ -114,38 +100,42 @@ class MOPopulation(SpeciatedPopulation):
     def tournament_selection(self, genomes):
         return sorted(genomes, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))[0]
 
-    def refine_behaviors(self, evaluate):
-        plt.figure(1)
-        plt.clf()
-
-        phenotypes = self.create_phenotypes()
-        print("Refining AURORA...")
-        self.aurora.refine(phenotypes, evaluate)
-        print("Done.")
-
-        fitnesses, states = evaluate(phenotypes)
-
-        print("Re-characterizing archived genomes...")
-        features = self.aurora.characterize(states)
-        print("Done.")
-
-        features = np.array([x for _, x in sorted(zip(fitnesses, features), key=lambda a: a[0])])
-        fitnesses = sorted(fitnesses)
-
-        self.novelty_search.reset()
-        if self.use_local_competition:
-            self.novelty_search.calculate_local_competition(features, fitnesses)
-        else:
-            self.novelty_search.calculate_novelty(features, fitnesses)
+    # def refine_behaviors(self, evaluate):
+    #     phenotypes = self.create_phenotypes()
+    #     print("Refining AURORA...")
+    #     self.aurora.refine(phenotypes, evaluate)
+    #     print("Done.")
+    #
+    #     fitnesses, states = evaluate(phenotypes)
+    #
+    #     print("Re-characterizing archived genomes...")
+    #     features = self.aurora.characterize(states)
+    #     print("Done.")
+    #
+    #     features = np.array([x for _, x in sorted(zip(fitnesses, features), key=lambda a: a[0])])
+    #     fitnesses = sorted(fitnesses)
+    #
+    #     self.novelty_search.reset()
+    #     if self.use_local_competition:
+    #         self.novelty_search.calculate_local_competition(features, fitnesses)
+    #     else:
+    #         self.novelty_search.calculate_novelty(features, fitnesses)
 
     def newGeneration(self) -> List[Genome]:
+
+        # nd_genomes = self.genomes
+        # Sort them first by rank and then crowding distance
+        nd_genomes = sorted(self.genomes, key=lambda x: (x.data['rank'], -x.data['crowding_distance']))
+
+        space_to_fill = int(self.population_size / 10)
+        # nd_genomes = nd_genomes[:space_to_fill]
 
         new_genomes = []
         for s in self.species:
             reproduction_members = copy(s.members)
 
             # Generate new baby genome
-            to_spawn = max(0, s.numToSpawn - len(s.members))
+            to_spawn = max(1, s.numToSpawn - len(s.members))
             debug_print("Spawning {} for species {}".format(to_spawn, s.ID))
             for i in range(to_spawn):
                 baby: Genome = None

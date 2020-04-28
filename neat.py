@@ -1,16 +1,15 @@
-from typing import List, Any, Tuple
-
-import numpy as np
+from typing import List
 
 import neat.innovations
-from neat.utils import chunks
 from neat.phenotypes import Phenotype
 from neat.genes import MutationRates, Phase, SpeciationType
 
-from neat.mapElites import MapElites, MapElitesConfiguration, MapElitesUpdate
-from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
-from neat.multiobjectivePopulation import MOConfiguration, MOPopulation, MOUpdate
-from neat.population import PopulationConfiguration, Population
+from neat.populations.population import PopulationConfiguration, Population
+from neat.populations.weightagnosticPopulation import WeightAgnosticConfiguration, WeightAgnosticPopulation
+from neat.populations.mapElites import MapElites, MapElitesConfiguration
+from neat.populations.multiobjectivePopulation import MOConfiguration, MOPopulation
+from neat.populations.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration
+
 
 class NEAT:
 
@@ -29,6 +28,7 @@ class NEAT:
 
         self.epochs = -1
         self.refinement_epochs = [0, 50, 100, 350, 750, 1550]
+        # self.refinement_epochs = [50, 100, 350, 750, 1550]
         # self.refinement_epochs = [0, 10, 25, 50, 100, 150, 350, 750, 1550]
 
         # If using MapElites
@@ -39,9 +39,13 @@ class NEAT:
         elif isinstance(self.population_configuration, SpeciesConfiguration):
             self.population = SpeciatedPopulation(population_configuration, self.innovations, mutation_rates)
 
-        # If using regular speciated population
+        # If using multi-objective speciated population
         elif isinstance(self.population_configuration, MOConfiguration):
             self.population = MOPopulation(population_configuration, self.innovations, mutation_rates)
+
+        # If using weight-agnostic speciated population
+        elif isinstance(self.population_configuration, WeightAgnosticConfiguration):
+            self.population = WeightAgnosticPopulation(population_configuration, self.innovations, mutation_rates)
 
         # Passed function that runs the evaluation environment
         self.eval_env = eval_env
@@ -53,23 +57,6 @@ class NEAT:
 
     def _epoch(self):
         pass
-
-        # if self.epochs in self.refinement_epochs:
-        #     self.population.refine_behaviors(self.evaluate_vectorized)
-        #
-        # self.population.reproduce()
-        #
-        # self.phenotypes = self.population.create_phenotypes()
-        # fitnesses, states = self.evaluate_vectorized(self.phenotypes)
-        #
-        # if isinstance(self.population_configuration, MapElitesConfiguration):
-        #     self.population.updatePopulation(MapElitesUpdate(fitnesses, states))
-        #
-        # elif isinstance(self.population_configuration, SpeciesConfiguration):
-        #     self.population.updatePopulation(SpeciesUpdate(fitnesses))
-        #
-        # elif isinstance(self.population_configuration, MOConfiguration):
-        #     self.population.updatePopulation(MOUpdate(fitnesses, states))
 
     def epoch(self):
 

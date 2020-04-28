@@ -1,15 +1,13 @@
-from typing import List, Tuple
+from typing import List
 
 import neat.genes as genes
-from neat.genes import Genome, NeuronGene, LinkGene
+from neat.genes import Genome
 from neat.innovations import Innovations
-from neat.utils import fastCopy, debug_print
-from neat.population import Population, PopulationConfiguration, PopulationUpdate
+from neat.utils import fastCopy
+from neat.populations.population import Population, PopulationConfiguration, PopulationUpdate
 
-import math
 import random
 import numpy as np
-from copy import deepcopy, copy
 from icontract import require
 
 
@@ -63,10 +61,13 @@ class Species:
             m.adjustedFitness = m.fitness / len(self.members)
 
 
-    def becomeOlder(self) -> None:
+    def becomeOlder(self, allowStagnation) -> None:
         self.age += 1
 
         highestFitness = max([m.fitness for m in self.members])
+
+        if not allowStagnation:
+            return
 
         # Check if species is stagnant
         if (highestFitness <= self.highestFitness):
@@ -132,12 +133,6 @@ class SpeciatedPopulation(Population):
 
     @require(lambda update: isinstance(update, SpeciesUpdate))
     def updatePopulation(self, update: PopulationUpdate) -> None:
-        # Only update fitness if it's better than it was
-        # Will of course always update for new genomes
-        # improved_genomes = [(f, g) for f, g in zip(update.fitness, self.genomes) if f > g.fitness]
-        # for fitness, genome in improved_genomes:
-        #     genome.fitness = fitness
-        # print(self.genomes)
         # Set fitness score to their respective genome
         for index, genome in enumerate(self.genomes):
             genome.fitness = update.fitness[index]
@@ -162,11 +157,11 @@ class SpeciatedPopulation(Population):
 
         # Age species and remove stagnant species
         for s in self.species:
-            if s != best_species:
-                s.becomeOlder()
+            # if s != best_species:
+            s.becomeOlder(s != best_species)
 
-                if s.stagnant and len(self.species) > 1:
-                    self.species.remove(s)
+            if s.stagnant and len(self.species) > 1:
+                self.species.remove(s)
         
         for s in self.species:
             s.adjustFitnesses()
@@ -231,13 +226,12 @@ class SpeciatedPopulation(Population):
 
     def speciate(self, genome) -> None:
 
-        # if random.random() > 0.01:
-        if random.random() > 1.0:
-            random.choice(genome.parents).species.addMember(genome)
-            return
-
         distances = [genome.calculateCompatibilityDistance(s.leader) for s in self.species]
         closest_species = np.argmin(distances)
+
+        if random.random() > 0.01:
+            self.species[closest_species].addMember(genome)
+            return
 
         # If it doesn't fit anywhere, create new species
         if distances[closest_species] >= self.mutationRates.newSpeciesTolerance:
@@ -260,6 +254,8 @@ class SpeciatedPopulation(Population):
             new_genomes = []
 
             s.members.sort(reverse=True, key=lambda x: x.fitness)
+
+            print(s.best())
 
             # Grabbing the top 2 performing genomes
             for topMember in s.members[:s.num_of_elites]:

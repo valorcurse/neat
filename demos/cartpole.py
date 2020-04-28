@@ -5,8 +5,6 @@ if __name__ == '__main__':
     from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 
     import numpy as np
-    import networkx as nx
-    import matplotlib.pyplot as plt
     from prettytable import PrettyTable
 
 
@@ -14,7 +12,7 @@ if __name__ == '__main__':
     from neat.neatTypes import NeuronType
     from neat.evaluation import Evaluation
     from neat.phenotypes import Phenotype, SequentialCUDA
-    from neat.speciatedPopulation import SpeciesConfiguration
+    from neat.populations.speciatedPopulation import SpeciesConfiguration
 
 
     env_name = "CartPole-v1"

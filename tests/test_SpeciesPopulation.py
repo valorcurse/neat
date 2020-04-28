@@ -1,11 +1,9 @@
 import pytest
-from neat.genes import Genome, MutationRates, NeuronGene, LinkGene
+from neat.genes import MutationRates, NeuronGene, LinkGene
 from neat.neatTypes import NeuronType
 from neat.innovations import Innovations
-from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
+from neat.populations.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
 import numpy as np
-import math
-import networkx as nx
 
 pop_size = 2
 inputs = 2

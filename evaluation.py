@@ -54,7 +54,14 @@ class FitnessEvaluation(Evaluation):
 
     def __init__(self):
         pass
-        # self.num_of_envs = 0
 
     def evaluate(self, phenotypes: List[Phenotype]) -> List[np.ndarray]:
+        pass
+
+class MOEvaluation(Evaluation):
+
+    def __init__(self):
+        pass
+
+    def evaluate(self, phenotypes: List[Phenotype]) -> Tuple[np.ndarray]:
         pass

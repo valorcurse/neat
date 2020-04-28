@@ -1,15 +1,13 @@
-from typing import List, Tuple
 from icontract import require
 
 import numpy as np
-import scipy as sp
 from scipy.spatial import cKDTree
 
 
 import neat.genes as genes
 from neat.innovations import Innovations
-from neat.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
-from neat.population import PopulationUpdate
+from neat.populations.speciatedPopulation import SpeciatedPopulation, SpeciesConfiguration, SpeciesUpdate
+from neat.populations.population import PopulationUpdate
 
 class NoveltyUpdate(SpeciesUpdate):
     def __init__(self, behaviors, fitness: np.ndarray):

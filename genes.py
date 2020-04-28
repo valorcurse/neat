@@ -7,6 +7,7 @@ from icontract import invariant, require
 
 import math
 import random
+from random import randrange
 import numpy as np
 import networkx as nx
 from numba import jit
@@ -28,20 +29,22 @@ class SpeciationType(Enum):
     COMPATIBILITY_DISTANCE = 0
     NOVELTY = 1
 
-class FuncsEnum(Enum):
+class ActivationsEnum(Enum):
     tanh = 0
     sin = 1
     cos = 2
     sigmoid = 3
     leakyRelu = 4
     linear = 5
-    maxout = 6
+    inverse = 6
+    abs = 7
+    step = 8
 
 
 class MutationRates:
     def __init__(self) -> None:
 
-        self.newSpeciesTolerance = 5.0
+        self.newSpeciesTolerance = 6.0
 
         self.crossoverRate = 0.3
         self.chanceToAddNeuron = 0.03
@@ -62,71 +65,20 @@ class MutationRates:
 class NeuronGene:
     def __init__(self, neuronType: NeuronType, ID: int, y: float, x: float = 0.0) -> None:
         self.neuronType = neuronType
-        
+
         self.ID = ID
-        
+
         self.y = y
         self.x = x
-        
-        # self.activation = self.relu
-        # self.activation = self.leakyRelu
-        self.activation = self.sigmoid
-        self.bias = 0.0
 
-        # self.activations = [self.sigmoid, self.tanh, self.sin, self.cos]
-        self.activations = [self.sigmoid, self.tanh, self.sin, self.cos, self.leakyRelu, self.linear]
+        self.activation = ActivationsEnum.linear
+        self.bias = 0.0
 
     def __repr__(self):
         return "NeuronGene(Type={0}, ID={1}, x={2}, y={3})".format(self.neuronType, self.ID, self.x, self.y)
 
     def __hash__(self):
         return hash((self.ID, self.x, self.y))
-
-
-    @staticmethod
-    @jit
-    def sigmoid(x: float) -> float:
-        return 1.0 / (1.0 + math.exp(-x))   # Sigmoid
-
-    @staticmethod
-    @jit
-    def tanh(x: float) -> float:
-        return math.tanh(x)                   # Tanh
-
-    @staticmethod
-    @jit
-    def relu(x: float) -> float:
-        return max(x, 0)             # ReLu
-
-    @staticmethod
-    @jit
-    def leakyRelu(x: float) -> float:
-        return x if x > 0.0 else x * 0.01   # Leaky ReLu
-
-    @staticmethod
-    @jit
-    def sin(x: float) -> float:
-        return math.sin(x)                    # Sin
-
-    @staticmethod
-    @jit
-    def cos(x: float) -> float:
-        return math.cos(x)                     # Cos
-
-    @staticmethod
-    @jit
-    def gaussian(x: float) -> float:
-        return math.exp((-x)**2)
-
-    @staticmethod
-    @jit
-    def linear(x: float) -> float:
-        return x
-
-    @staticmethod
-    @jit
-    def maxout(x: float) -> float:
-        return x
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and self.ID == other.ID
@@ -176,9 +128,9 @@ class Genome:
 
         if len(self.neurons) == 0:
             for _ in range(self.inputs):
-                self._addNeuron(NeuronType.INPUT).activation = NeuronGene.linear
+                self._addNeuron(NeuronType.INPUT).activation = ActivationsEnum.linear
             for _ in range(self.outputs):
-                self._addNeuron(NeuronType.OUTPUT).activation = NeuronGene.sigmoid
+                self._addNeuron(NeuronType.OUTPUT).activation = ActivationsEnum.sigmoid
         # else:
         #     self.neurons = fastCopy(neurons)
             # self.neurons = deepcopy(neurons)
@@ -186,8 +138,6 @@ class Genome:
         self.data = {}
 
         self.fitness: float = -1000.0
-        # self.objectives = []
-
         self.adjustedFitness: float = -1000.0
         self.novelty: float = -1000.0
         
@@ -195,6 +145,9 @@ class Genome:
         self.distance: float = -1000.0
         
         self.species: Optional[Species] = None
+
+        # Only use for debugging
+        self.phenotype = None
 
         # Check whether a link is pointing to a non existing node
         # neuron_ids = set([n.ID for n in self.neurons])
@@ -394,12 +347,7 @@ class Genome:
         random_link = random.choice(self.links)
         if random.random() > mutationRates.probabilityOfWeightReplaced:
             random_link.weight += np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
-            # mutation = np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
-            # random_link.weight = np.clip(random_link.weight + mutation, -5.0, 5.0)
-
-
         else:
-            # random_link.weight = np.clip(np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0], -5.0, 5.0)
             random_link.weight = np.random.normal(0, mutationRates.maxWeightPerturbation, 1)[0]
 
         return True
@@ -415,12 +363,14 @@ class Genome:
         return True
 
     def mutateActivation(self, mutationRates: MutationRates) -> bool:
-        if (random.random() > mutationRates.chanceToMutateActivation):
+        neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN]]
+
+        if random.random() > mutationRates.chanceToMutateActivation or len(neurons) == 0:
             return False
 
-        neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
+        # neurons = [n for n in self.neurons if n.neuronType in [NeuronType.HIDDEN, NeuronType.OUTPUT]]
         random_neuron = random.choice(neurons)
-        random_neuron.activation = random.choice(random_neuron.activations)
+        random_neuron.activation = ActivationsEnum(random.randrange(len(ActivationsEnum)))
 
         return True
 
@@ -435,9 +385,8 @@ class Genome:
 
         mutation_successful = False
         while len(mutation_functions) > 0 and not mutation_successful:
-            r= random.randint(0, len(mutation_functions) - 1)
-            random_mutation = mutation_functions[r]
-            # random_mutation = random.choice(mutation_functions)
+            # random_mutation = mutation_functions[random.randint(0, len(mutation_functions) - 1)]
+            random_mutation = random.choice(mutation_functions)
             # print(random_mutation)
             mutation_successful = random_mutation()
 
@@ -498,6 +447,7 @@ class Genome:
 
         phenotype = neat.phenotypes.Phenotype(pheno_graph, self.ID)
         phenotype.genome = self
+        self.phenotype = phenotype
 
         return phenotype
 
